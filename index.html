@@ -1,0 +1,1630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Law Extractor — webcam instrument</title>
+<style>
+:root{
+  --ink:#0b1015; --panel:#121a21; --panel2:#0f161c; --line:#223039;
+  --anc:#d9a441; --anc-dim:#7a5f2a; --mod:#5fd0d6; --mod-dim:#2c6266;
+  --txt:#c9d6de; --dim:#6d8291; --hot:#e0715a; --ok:#8fbf6b;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --disp:Georgia,"Iowan Old Style","Times New Roman",serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:var(--ink); color:var(--txt); font-family:var(--mono);
+  font-size:12px; line-height:1.45; -webkit-font-smoothing:antialiased;
+}
+a{color:var(--mod)}
+button{font-family:var(--mono);font-size:11px;cursor:pointer}
+
+/* ---- faceplate chrome ---- */
+header{
+  display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+  padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel2);
+}
+h1{
+  font-family:var(--disp);font-weight:400;font-size:19px;margin:0;
+  letter-spacing:.18em;text-transform:uppercase;color:#e7eef3;
+}
+h1 span{color:var(--anc)}
+.sub{color:var(--dim);font-size:11px}
+.spacer{flex:1}
+.btn{
+  background:transparent;border:1px solid var(--line);color:var(--txt);
+  padding:5px 11px;border-radius:2px;letter-spacing:.05em;
+}
+.btn:hover{border-color:var(--mod-dim);color:#fff}
+.btn.on{border-color:var(--anc);color:var(--anc)}
+.btn.primary{border-color:var(--mod);color:var(--mod)}
+select.btn{background:#0f161c;color:var(--txt);max-width:190px}
+.alarm{border:1px solid var(--hot);background:rgba(224,113,90,.09);color:var(--hot);padding:7px 9px;margin-top:8px;font-size:11px;display:none}
+.alarm.on{display:block}
+#probeReport{margin-top:8px;display:none}
+#probeReport.on{display:block}
+.crow{display:grid;grid-template-columns:1.6em 1fr auto auto;gap:8px;align-items:center;
+  border-bottom:1px dotted #1a242c;padding:3px 0}
+.crow .ix{color:var(--dim)}
+.crow .lum{font-variant-numeric:tabular-nums}
+.crow.dark .lum{color:var(--hot)}
+.crow.lit .lum{color:var(--ok)}
+.crow button{background:transparent;border:1px solid var(--line);color:var(--mod);padding:1px 7px}
+
+/* ---- signature: the peculiarity strip ---- */
+#strip{
+  border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0e151b,#0a0f14);
+  padding:7px 16px 5px;position:relative;
+}
+.striphead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
+.striphead b{font-family:var(--disp);font-weight:400;letter-spacing:.14em;text-transform:uppercase;font-size:11px;color:#9fb2be}
+#stripbars{display:flex;align-items:flex-end;gap:2px;height:52px}
+.bar{flex:1;position:relative;height:100%;display:flex;align-items:flex-end;min-width:6px}
+.bar i{display:block;width:100%;background:var(--anc-dim);transition:height .18s linear,background .18s}
+.bar.mod i{background:var(--mod-dim)}
+.bar.glint i{background:var(--hot);box-shadow:0 0 9px var(--hot)}
+.bar:hover i{filter:brightness(1.7)}
+.bar b{
+  position:absolute;bottom:100%;left:50%;transform:translateX(-50%);
+  background:#000;border:1px solid var(--line);padding:3px 6px;white-space:nowrap;
+  display:none;font-weight:400;z-index:9;
+}
+.bar:hover b{display:block}
+
+/* ---- layout ---- */
+main{display:grid;grid-template-columns:minmax(300px,1.05fr) minmax(300px,1.15fr) minmax(280px,1fr);gap:1px;background:var(--line)}
+.col{background:var(--ink);min-width:0;padding:0 0 40px}
+section{border-bottom:1px solid var(--line);padding:12px 16px}
+h2{
+  font-family:var(--disp);font-weight:400;font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:#93a6b3;margin:0 0 9px;display:flex;gap:8px;align-items:baseline;
+}
+h2 em{font-style:normal;color:var(--dim);letter-spacing:0;font-family:var(--mono);font-size:10px}
+
+/* ---- viewport ---- */
+#stage{position:relative;background:#000;border:1px solid var(--line);aspect-ratio:4/3;overflow:hidden}
+#stage video,#stage canvas{position:absolute;inset:0;width:100%;height:100%}
+#stage video{object-fit:cover;filter:saturate(.85) contrast(1.02)}
+#ov{pointer-events:none}
+#noCam{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--dim);padding:24px}
+.viewbtns{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+
+/* ---- readouts ---- */
+.kv{display:grid;grid-template-columns:1fr auto;gap:1px 10px}
+.kv div{padding:2px 0;border-bottom:1px dotted #1a242c}
+.kv div:nth-child(even){text-align:right;color:#e7eef3}
+.num{color:#e7eef3}
+canvas.plot{width:100%;height:64px;display:block;background:var(--panel2);border:1px solid var(--line)}
+.plotlab{display:flex;justify-content:space-between;color:var(--dim);font-size:10px;margin:4px 0 2px}
+
+/* ---- lens cards ---- */
+.lens{
+  border-left:2px solid var(--anc-dim);padding:6px 0 7px 9px;margin-bottom:7px;
+}
+.lens.mod{border-left-color:var(--mod-dim)}
+.lens.glint{border-left-color:var(--hot);background:rgba(224,113,90,.06)}
+.lens .nm{font-family:var(--disp);font-size:12.5px;color:var(--anc);letter-spacing:.02em}
+.lens.mod .nm{color:var(--mod)}
+.lens .who{color:var(--dim);font-size:10px;margin-left:6px;font-family:var(--mono)}
+.lens .say{color:var(--txt);margin-top:2px}
+.lens .val{color:#e7eef3}
+.lens .quiet{color:var(--dim)}
+
+/* ---- guesses ---- */
+.guess{border:1px solid var(--line);padding:9px 11px;margin-bottom:8px;background:var(--panel2)}
+.guess .g{font-family:var(--disp);font-size:14px;color:#e7eef3;margin-bottom:3px}
+.guess .why{color:var(--dim);font-size:11px}
+.guess .kill{color:var(--hot);font-size:11px;margin-top:4px}
+.conf{height:3px;background:#1a242c;margin:6px 0 6px}
+.conf i{display:block;height:100%;background:var(--ok)}
+.tagrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}
+.tag{border:1px solid var(--line);padding:1px 6px;color:var(--dim);font-size:10px}
+
+/* ---- log ---- */
+#log{height:150px;overflow:auto;background:var(--panel2);border:1px solid var(--line);padding:7px 9px;font-size:11px}
+#log div{border-bottom:1px dotted #1a242c;padding:1px 0}
+#log .t{color:var(--dim)}
+#log .a{color:var(--anc)}
+#log .m{color:var(--mod)}
+#log .h{color:var(--hot)}
+
+/* ---- probe ---- */
+#probePanel{
+  height:74px;border:1px solid var(--line);background:#2a2a2a;
+  display:flex;align-items:center;justify-content:center;color:#000;
+  font-size:10px;letter-spacing:.1em;
+}
+.warn{color:var(--hot);font-size:10.5px;margin-top:6px}
+.note{color:var(--dim);font-size:10.5px;margin-top:6px}
+@media (max-width:1000px){ main{grid-template-columns:1fr} }
+@media (prefers-reduced-motion:reduce){ .bar i{transition:none} }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Law <span>Extractor</span></h1>
+  <div class="sub">point it at anything · 27 rulers, 3000 BC → 2026 · the maths is the last observer through the door</div>
+  <div class="spacer"></div>
+  <button class="btn primary" id="start">Start camera</button>
+  <button class="btn" id="pause">Pause</button>
+  <button class="btn" id="dump">Save ledger</button>
+</header>
+
+<div id="strip">
+  <div class="striphead">
+    <b>Peculiarity — which ruler is the world unexpectedly simple in?</b>
+    <span class="sub" id="stripinfo">waiting for light</span>
+  </div>
+  <div id="stripbars"></div>
+</div>
+
+<main>
+  <!-- ============ LEFT ============ -->
+  <div class="col">
+    <section>
+      <h2>View <em id="fpslab">—</em></h2>
+      <div id="stage">
+        <video id="vid" playsinline muted autoplay></video>
+        <canvas id="ov"></canvas>
+        <div id="noCam">no signal — press <b style="color:#e7eef3">Start camera</b><br><span style="font-size:10px">nothing leaves this page; every number below is computed in your browser</span></div>
+      </div>
+      <div class="viewbtns">
+        <select class="btn" id="camsel" title="which camera"><option value="">camera — default</option></select>
+        <button class="btn" id="testBtn">Test every camera</button>
+        <button class="btn" id="screenBtn">Share a screen</button>
+        <button class="btn" id="fileBtn">Open a video file</button>
+        <input type="file" id="fileInp" accept="video/*" style="display:none">
+      </div>
+      <div class="note" id="srcinfo">no source yet</div>
+      <div class="alarm" id="blackAlarm"></div>
+      <div id="probeReport"></div>
+      <div class="viewbtns" style="margin-top:9px">
+        <button class="btn on" data-ov="moment">mass &amp; axes</button>
+        <button class="btn" data-ov="flow">flow</button>
+        <button class="btn" data-ov="resid">unexplained</button>
+        <button class="btn" data-ov="graph">graph</button>
+        <button class="btn" data-ov="phase">phase</button>
+        <button class="btn" data-ov="none">clean</button>
+      </div>
+      <div class="note">Overlays draw what a lens actually measured — not a decoration of it.</div>
+    </section>
+
+    <section>
+      <h2>Active probe <em>known excitation → unknown medium</em></h2>
+      <div id="probePanel">PROBE PANEL — idle</div>
+      <div class="viewbtns">
+        <button class="btn" id="probeBtn">Start probe</button>
+        <span class="sub" id="probeStat">off</span>
+      </div>
+      <div class="warn">Gentle grey-level modulation, max 4 transitions/sec, low contrast. Skip it if you are photosensitive.</div>
+      <div class="note">The panel drives a known 127-step sequence at the room. Whatever the camera sees of it — a lit face, a reflection, the auto-exposure reacting — is a measured transfer function of everything in between.</div>
+    </section>
+
+    <section>
+      <h2>Event log</h2>
+      <div id="log"></div>
+    </section>
+  </div>
+
+  <!-- ============ MIDDLE ============ -->
+  <div class="col">
+    <section>
+      <h2>Raw readings</h2>
+      <div class="kv" id="raw"></div>
+    </section>
+
+    <section>
+      <h2>Time spectrum <em>global luminance</em></h2>
+      <canvas class="plot" id="pSpec"></canvas>
+      <div class="plotlab"><span>0 Hz</span><span id="specpk">—</span><span id="nyq">—</span></div>
+    </section>
+
+    <section>
+      <h2>Graph spectrum <em>Huang: frequency defined by the connectivity, not the clock</em></h2>
+      <canvas class="plot" id="pGraph"></canvas>
+      <div class="plotlab"><span>smooth across the network</span><span id="graphsplit">—</span><span>rough</span></div>
+    </section>
+
+    <section>
+      <h2>Modes <em>PCA spectrum · what the scene actually has room for</em></h2>
+      <canvas class="plot" id="pPCA"></canvas>
+      <div class="plotlab"><span>mode 1</span><span id="pcalab">—</span><span>mode 48</span></div>
+    </section>
+
+    <section>
+      <h2>Microstates <em>4 quasi-stable spatial configurations, learned online</em></h2>
+      <canvas class="plot" id="pState" style="height:44px"></canvas>
+      <div class="plotlab"><span id="statelab">—</span><span id="statedwell">—</span></div>
+    </section>
+  </div>
+
+  <!-- ============ RIGHT ============ -->
+  <div class="col">
+    <section>
+      <h2>What it looks like <em>educated guesses, with their killers</em></h2>
+      <div id="guesses"><div class="note">Nothing yet. Guesses appear once ~8 seconds of signal exist.</div></div>
+    </section>
+
+    <section>
+      <h2>Ancient rulers</h2>
+      <div id="lensAnc"></div>
+    </section>
+
+    <section>
+      <h2>Modern rulers</h2>
+      <div id="lensMod"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+"use strict";
+/* ==================================================================
+   LAW EXTRACTOR
+   raw pixels -> many rulers -> peculiarity -> guesses -> falsifiers
+   No ontology is supplied. Every lens is a *proposed way of looking*,
+   and each carries a number saying how simple the world became in it.
+   ================================================================== */
+
+const FW=32, FH=24;              // fine luminance field
+const GW=8,  GH=6, NREG=GW*GH;   // coarse regions used for spectral work
+const NBUF=512;                  // ring buffer depth (~17 s at 30fps)
+const WIN=256;                   // analysis window
+
+/* ---------------- state ---------------- */
+const S={
+  running:false, paused:false, fps:0, frames:0, t0:0,
+  fine:new Float32Array(FW*FH), finePrev:new Float32Array(FW*FH),
+  hist:Array.from({length:NREG},()=>new Float32Array(NBUF)),
+  gHist:new Float32Array(NBUF), grHist:new Float32Array(NBUF),
+  ggHist:new Float32Array(NBUF), gbHist:new Float32Array(NBUF),
+  drive:new Float32Array(NBUF),
+  hp:0, n:0,
+  flow:new Float32Array(GW*GH*2), resid:new Float32Array(NREG),
+  pcaVec:null, pcaVal:null, gVec:null, gVal:null, corr:null,
+  phase:new Float32Array(NREG), phaseFit:null,
+  micro:null, microIdx:0, microSeq:[], microDwell:0,
+  spec:null, specF:null,
+  overlay:"moment",
+  probe:{on:false, reg:0x7f, bit:1, last:0, gain:0, delay:0, asym:0, r:0},
+  log:[]
+};
+
+/* ---------------- helpers ---------------- */
+const clamp=(x,a,b)=>x<a?a:x>b?b:x;
+const fmt=(x,d=2)=>(x===null||x===undefined||!isFinite(x))?"—":(+x).toFixed(d);
+function get(r,k){ return S.hist[r][(S.hp-1-k+NBUF*2)%NBUF]; }
+function getG(buf,k){ return buf[(S.hp-1-k+NBUF*2)%NBUF]; }
+
+function slice(buf,len){ // newest-last window
+  const o=new Float64Array(len);
+  for(let i=0;i<len;i++) o[len-1-i]=getG(buf,i);
+  return o;
+}
+function sliceReg(r,len){
+  const o=new Float64Array(len);
+  for(let i=0;i<len;i++) o[len-1-i]=get(r,i);
+  return o;
+}
+function detrend(x){
+  const n=x.length; let sx=0,sy=0,sxx=0,sxy=0;
+  for(let i=0;i<n;i++){ sx+=i; sy+=x[i]; sxx+=i*i; sxy+=i*x[i]; }
+  const d=n*sxx-sx*sx, b=d===0?0:(n*sxy-sx*sy)/d, a=(sy-b*sx)/n;
+  const o=new Float64Array(n); for(let i=0;i<n;i++) o[i]=x[i]-(a+b*i);
+  return o;
+}
+function zscore(x){
+  const n=x.length; let m=0; for(let i=0;i<n;i++) m+=x[i]; m/=n;
+  let v=0; for(let i=0;i<n;i++) v+=(x[i]-m)*(x[i]-m); v=Math.sqrt(v/n)||1e-9;
+  const o=new Float64Array(n); for(let i=0;i<n;i++) o[i]=(x[i]-m)/v;
+  return o;
+}
+function corr(a,b){
+  const n=Math.min(a.length,b.length); let ma=0,mb=0;
+  for(let i=0;i<n;i++){ma+=a[i];mb+=b[i];} ma/=n; mb/=n;
+  let sa=0,sb=0,sab=0;
+  for(let i=0;i<n;i++){const x=a[i]-ma,y=b[i]-mb;sa+=x*x;sb+=y*y;sab+=x*y;}
+  const d=Math.sqrt(sa*sb); return d<1e-12?0:sab/d;
+}
+// DFT magnitude+phase, bins 1..K
+const COS=[],SIN=[];
+function tables(K,L){
+  if(COS.L===L&&COS.K===K) return;
+  COS.length=0;SIN.length=0;
+  for(let k=1;k<=K;k++){
+    const c=new Float64Array(L), s=new Float64Array(L);
+    for(let t=0;t<L;t++){ const a=2*Math.PI*k*t/L; c[t]=Math.cos(a); s[t]=Math.sin(a); }
+    COS.push(c);SIN.push(s);
+  }
+  COS.L=L;COS.K=K;SIN.L=L;SIN.K=K;
+}
+function dft(x,K){
+  const L=x.length; tables(K,L);
+  const mag=new Float64Array(K), ph=new Float64Array(K);
+  for(let k=0;k<K;k++){
+    let re=0,im=0; const c=COS[k],s=SIN[k];
+    for(let t=0;t<L;t++){ re+=x[t]*c[t]; im-=x[t]*s[t]; }
+    mag[k]=Math.sqrt(re*re+im*im)/L; ph[k]=Math.atan2(im,re);
+  }
+  return {mag,ph};
+}
+function binPhase(x,k){ // phase & magnitude at one bin, no full transform
+  const L=x.length; let re=0,im=0;
+  for(let t=0;t<L;t++){ const a=2*Math.PI*(k+1)*t/L; re+=x[t]*Math.cos(a); im-=x[t]*Math.sin(a); }
+  return {ph:Math.atan2(im,re), mag:Math.sqrt(re*re+im*im)/L};
+}
+function hann(x){
+  const n=x.length,o=new Float64Array(n);
+  for(let i=0;i<n;i++) o[i]=x[i]*0.5*(1-Math.cos(2*Math.PI*i/(n-1)));
+  return o;
+}
+// symmetric eigen (Jacobi). returns vals desc + vecs
+function jacobi(Ain,n,sweeps=8){
+  const A=Float64Array.from(Ain), V=new Float64Array(n*n);
+  for(let i=0;i<n;i++) V[i*n+i]=1;
+  for(let s=0;s<sweeps;s++){
+    let off=0;
+    for(let p=0;p<n-1;p++) for(let q=p+1;q<n;q++) off+=A[p*n+q]*A[p*n+q];
+    if(off<1e-14) break;
+    for(let p=0;p<n-1;p++) for(let q=p+1;q<n;q++){
+      const apq=A[p*n+q]; if(Math.abs(apq)<1e-15) continue;
+      const th=(A[q*n+q]-A[p*n+p])/(2*apq);
+      const t=(th>=0?1:-1)/(Math.abs(th)+Math.sqrt(th*th+1));
+      const c=1/Math.sqrt(t*t+1), sn=t*c;
+      for(let k=0;k<n;k++){ const a=A[k*n+p],b=A[k*n+q]; A[k*n+p]=c*a-sn*b; A[k*n+q]=sn*a+c*b; }
+      for(let k=0;k<n;k++){ const a=A[p*n+k],b=A[q*n+k]; A[p*n+k]=c*a-sn*b; A[q*n+k]=sn*a+c*b; }
+      for(let k=0;k<n;k++){ const a=V[k*n+p],b=V[k*n+q]; V[k*n+p]=c*a-sn*b; V[k*n+q]=sn*a+c*b; }
+    }
+  }
+  const e=[]; for(let i=0;i<n;i++) e.push({v:A[i*n+i],i});
+  e.sort((a,b)=>b.v-a.v);
+  return {vals:e.map(x=>x.v), vecs:e.map(x=>{const u=new Float64Array(n);for(let k=0;k<n;k++)u[k]=V[k*n+x.i];return u;})};
+}
+
+/* ================================================================
+   THE RULERS
+   Each lens: id, era, name, who, run(), and a `score` in [0,1]
+   meaning "how unexpectedly simple does the world look through me".
+   ================================================================ */
+const L=[];
+function lens(o){ o.score=0; o.hist=[]; o.mu=0; o.sd=0.001; o.glint=false; o.say="—"; L.push(o); return o; }
+
+/* ---------------- ANCIENT ---------------- */
+
+lens({id:"moment",era:"anc",name:"Moments",who:"Archimedes, ~250 BC",
+ run(){
+  const f=S.fine; let m0=0,mx=0,my=0;
+  for(let y=0;y<FH;y++)for(let x=0;x<FW;x++){const v=f[y*FW+x];m0+=v;mx+=x*v;my+=y*v;}
+  if(m0<1e-6) return;
+  const cx=mx/m0, cy=my/m0;
+  let sxx=0,syy=0,sxy=0;
+  for(let y=0;y<FH;y++)for(let x=0;x<FW;x++){const v=f[y*FW+x],dx=x-cx,dy=y-cy;sxx+=v*dx*dx;syy+=v*dy*dy;sxy+=v*dx*dy;}
+  sxx/=m0;syy/=m0;sxy/=m0;
+  const tr=sxx+syy, det=sxx*syy-sxy*sxy, dsc=Math.sqrt(Math.max(0,tr*tr/4-det));
+  const l1=tr/2+dsc, l2=tr/2-dsc;
+  const th=0.5*Math.atan2(2*sxy,sxx-syy);
+  const ecc=l1>1e-9?Math.sqrt(Math.max(0,1-l2/l1)):0;
+  const dcx=cx-(this.pcx??cx), dcy=cy-(this.pcy??cy);
+  this.pcx=cx;this.pcy=cy;
+  this.cx=cx;this.cy=cy;this.l1=Math.sqrt(l1);this.l2=Math.sqrt(l2);this.th=th;this.ecc=ecc;
+  this.speed=Math.hypot(dcx,dcy)*S.fps;
+  this.score=clamp(ecc,0,1);
+  this.say=`mass at (${fmt(cx,1)}, ${fmt(cy,1)}) · axes ${fmt(this.l1,1)}/${fmt(this.l2,1)} · tilt ${fmt(th*57.3,0)}° · drifting ${fmt(this.speed,2)} cell/s`;
+ }});
+
+lens({id:"apollo",era:"anc",name:"Ratio loci",who:"Apollonius, ~200 BC",
+ run(){
+  // planar gradient vs radial falloff: is the source far or near?
+  const f=S.fine; let n=0,sx=0,sy=0,sv=0,sxx=0,syy=0,sxv=0,syv=0,sxy=0;
+  for(let y=0;y<FH;y++)for(let x=0;x<FW;x++){const v=f[y*FW+x];n++;sx+=x;sy+=y;sv+=v;sxx+=x*x;syy+=y*y;sxy+=x*y;sxv+=x*v;syv+=y*v;}
+  const mx=sx/n,my=sy/n,mv=sv/n;
+  const cxx=sxx/n-mx*mx, cyy=syy/n-my*my, cxy=sxy/n-mx*my;
+  const cxv=sxv/n-mx*mv, cyv=syv/n-my*mv;
+  const D=cxx*cyy-cxy*cxy||1e-9;
+  const bx=(cxv*cyy-cyv*cxy)/D, by=(cyv*cxx-cxv*cxy)/D;
+  let ssPlane=0, ssTot=0;
+  for(let y=0;y<FH;y++)for(let x=0;x<FW;x++){
+    const v=f[y*FW+x], p=mv+bx*(x-mx)+by*(y-my);
+    ssPlane+=(v-p)*(v-p); ssTot+=(v-mv)*(v-mv);
+  }
+  // radial model around brightest cell
+  let bi=0; for(let i=1;i<FW*FH;i++) if(f[i]>f[bi]) bi=i;
+  const px=bi%FW, py=(bi/FW)|0;
+  let sr=0,srr=0,srv=0,sv2=0;
+  for(let y=0;y<FH;y++)for(let x=0;x<FW;x++){
+    const r=1/(1+((x-px)**2+(y-py)**2)/40), v=f[y*FW+x];
+    sr+=r;srr+=r*r;srv+=r*v;sv2+=v;
+  }
+  const mr=sr/n, k=(srv/n-mr*(sv2/n))/((srr/n-mr*mr)||1e-9), a0=sv2/n-k*mr;
+  let ssRad=0;
+  for(let y=0;y<FH;y++)for(let x=0;x<FW;x++){
+    const r=1/(1+((x-px)**2+(y-py)**2)/40), v=f[y*FW+x];
+    ssRad+=(v-(a0+k*r))**2;
+  }
+  const r2p=1-ssPlane/(ssTot||1e-9), r2r=1-ssRad/(ssTot||1e-9);
+  this.az=Math.atan2(-by,bx)*57.3; this.grad=Math.hypot(bx,by);
+  this.r2p=r2p; this.r2r=r2r; this.near=r2r>r2p+0.05;
+  this.px=px; this.py=py;
+  this.score=clamp(Math.max(r2p,r2r),0,1);
+  const dir=(a)=>["right","upper right","up","upper left","left","lower left","down","lower right"][((Math.round(a/45)+8)%8)];
+  this.say=`brightness rises toward ${dir(this.az)} (${fmt(this.az,0)}°) · ${this.near?`falls off radially from (${px},${py}) — near source, fit ${fmt(r2r,2)}`:`flat gradient — far source, fit ${fmt(r2p,2)}`}`;
+ }});
+
+lens({id:"ratio",era:"anc",name:"Small ratios",who:"Pythagoras, ~530 BC",
+ run(){
+  const pk=S.peaks; if(!pk||pk.length<2){this.say="need two peaks";this.score=0;return;}
+  if(!S.peaksTrusted){ this.score=0; this.say=`no rhythm stands clearly above the background${S.peaks&&S.peaks.length?` (best peak only ${fmt(S.peaks[0].snr,1)}× its neighbours)`:""} — nothing here to measure`; return; }
+  let best=null;
+  for(let i=1;i<pk.length;i++){
+    const r=pk[i].f/pk[0].f;
+    for(let p=1;p<=8;p++)for(let q=1;q<=8;q++){
+      const e=Math.abs(r-p/q)/r;
+      if(!best||e<best.e) best={e,p,q,r,f1:pk[0].f,f2:pk[i].f};
+    }
+  }
+  if(!best){this.score=0;return;}
+  this.best=best;
+  this.score=clamp(1-best.e/0.06,0,1);
+  this.say=best.e<0.06
+    ? `${fmt(best.f2,2)} Hz : ${fmt(best.f1,2)} Hz locks to ${best.p}:${best.q} (off by ${fmt(best.e*100,1)}%)`
+    : `no small-integer lock — nearest ${best.p}:${best.q}, off ${fmt(best.e*100,1)}%`;
+ }});
+
+lens({id:"anthy",era:"anc",name:"Anthyphairesis",who:"Euclid, ~300 BC",
+ run(){
+  const pk=S.peaks; if(!pk||pk.length<2){this.say="need two periods";this.score=0;return;}
+  if(!S.peaksTrusted){ this.score=0; this.say=`no rhythm stands clearly above the background${S.peaks&&S.peaks.length?` (best peak only ${fmt(S.peaks[0].snr,1)}× its neighbours)`:""} — nothing here to measure`; return; }
+  let a=1/pk[0].f, b=1/pk[1].f; if(a<b){const t=a;a=b;b=t;}
+  const cf=[]; let depth=0;
+  for(let i=0;i<8 && b>1e-6;i++){
+    const q=Math.floor(a/b); cf.push(q);
+    const r=a-q*b; a=b; b=r; depth++;
+    if(b/a<0.02) break;
+  }
+  this.cf=cf; this.depth=depth;
+  this.score=clamp(1-(depth-1)/6,0,1);
+  this.say=`repeated subtraction terminates at depth ${depth} — [${cf.join("; ")}] · ${depth<=3?"the two rhythms share a common measure":"no shared measure found"}`;
+ }});
+
+lens({id:"dioph",era:"anc",name:"Integer relation",who:"Diophantus, ~250 AD",
+ run(){
+  const pk=S.peaks; if(!pk||pk.length<3){this.say="need three peaks";this.score=0;return;}
+  if(!S.peaksTrusted){ this.score=0; this.say=`no rhythm stands clearly above the background${S.peaks&&S.peaks.length?` (best peak only ${fmt(S.peaks[0].snr,1)}× its neighbours)`:""} — nothing here to measure`; return; }
+  const f=[pk[0].f,pk[1].f,pk[2].f];
+  let best=null;
+  for(let a=-4;a<=4;a++)for(let b=-4;b<=4;b++)for(let c=-4;c<=4;c++){
+    if(!a&&!b&&!c) continue;
+    const w=Math.abs(a)+Math.abs(b)+Math.abs(c);
+    const e=Math.abs(a*f[0]+b*f[1]+c*f[2])/(w*f[0]);
+    if(!best||e<best.e) best={e,a,b,c};
+  }
+  this.best=best;
+  this.score=clamp(1-best.e/0.05,0,1);
+  const sgn=(v,s)=>(v===0?"":(v>0?" + ":" − ")+Math.abs(v)+s);
+  this.say=best.e<0.05
+    ? `${best.a}f₁${sgn(best.b,"f₂")}${sgn(best.c,"f₃")} ≈ 0 — one mechanism, not three`
+    : `no integer relation among the three peaks (best residual ${fmt(best.e*100,1)}%)`;
+ }});
+
+lens({id:"crt",era:"anc",name:"Remainder fusion",who:"Sunzi, ~400 AD",
+ run(){
+  const P=S.regPeriods; if(!P||P.length<3){this.say="need three periodic regions";this.score=0;return;}
+  if(!S.peaksTrusted){ this.score=0; this.say=`no rhythm stands clearly above the background${S.peaks&&S.peaks.length?` (best peak only ${fmt(S.peaks[0].snr,1)}× its neighbours)`:""} — nothing here to measure`; return; }
+  const p=P.slice(0,3).map(o=>Math.max(2,Math.round(o.period)));
+  const phase=P.slice(0,3).map(o=>o.phase);
+  if(new Set(p).size<2){ this.score=0; this.say=`all three regions share the same period (${p[0]} frames) — no independent remainders to fuse`; return; }
+  let lcm=p[0]; const g=(a,b)=>b?g(b,a%b):a;
+  for(let i=1;i<3;i++) lcm=lcm/g(lcm,p[i])*p[i];
+  const span=Math.min(lcm,4000);
+  let bestT=0,bestE=1e9,second=1e9;
+  for(let t=0;t<span;t++){
+    let e=0;
+    for(let i=0;i<3;i++){
+      let d=Math.abs(((t%p[i])/p[i])-phase[i]); d=Math.min(d,1-d); e+=d*d;
+    }
+    if(e<bestE){second=bestE;bestE=e;bestT=t;} else if(e<second) second=e;
+  }
+  this.lcm=lcm; this.t=bestT; this.mods=p;
+  const unique=second>bestE*2.5;
+  this.score=clamp(unique?1-bestE*6:0.15,0,1);
+  this.say=`three aliased views (mod ${p.join(", ")}) ${unique?`agree on one hidden phase — event localized to 1 of ${lcm} frames (${fmt(lcm/S.fps,1)} s cycle)`:`do not agree — no single hidden clock`}`;
+ }});
+
+lens({id:"heron",era:"anc",name:"Triangulation",who:"Heron, ~60 AD",
+ run(){
+  const idx=S.topVar; if(!idx||idx.length<6){this.say="not enough moving regions";this.score=0;return;}
+  const m=Math.min(10,idx.length), maxLag=8;
+  const sig=idx.slice(0,m).map(r=>zscore(detrend(sliceReg(r,WIN))));
+  const D=new Float64Array(m*m);
+  for(let i=0;i<m;i++)for(let j=i+1;j<m;j++){
+    let bc=-2,bl=0;
+    for(let l=-maxLag;l<=maxLag;l++){
+      let s=0,n=0;
+      for(let t=maxLag;t<WIN-maxLag;t++){ s+=sig[i][t]*sig[j][t+l]; n++; }
+      const c=s/n; if(c>bc){bc=c;bl=l;}
+    }
+    const d=Math.abs(bl)+ (1-Math.max(0,bc))*maxLag;
+    D[i*m+j]=D[j*m+i]=d;
+  }
+  // classical MDS on D^2
+  const B=new Float64Array(m*m); const rm=new Float64Array(m); let gm=0;
+  for(let i=0;i<m;i++){ let s=0; for(let j=0;j<m;j++) s+=D[i*m+j]**2; rm[i]=s/m; gm+=s/(m*m); }
+  for(let i=0;i<m;i++)for(let j=0;j<m;j++) B[i*m+j]=-0.5*(D[i*m+j]**2-rm[i]-rm[j]+gm);
+  const E=jacobi(B,m,6);
+  const X=[],Y=[];
+  for(let i=0;i<m;i++){ X.push(E.vecs[0][i]*Math.sqrt(Math.max(0,E.vals[0]))); Y.push(E.vecs[1][i]*Math.sqrt(Math.max(0,E.vals[1]))); }
+  const a=[],b=[];
+  for(let i=0;i<m;i++)for(let j=i+1;j<m;j++){
+    a.push(Math.hypot(X[i]-X[j],Y[i]-Y[j]));
+    const ri=idx[i],rj=idx[j];
+    b.push(Math.hypot((ri%GW)-(rj%GW),((ri/GW)|0)-((rj/GW)|0)));
+  }
+  const c=corr(Float64Array.from(a),Float64Array.from(b));
+  this.agree=c; this.score=clamp(Math.abs(c),0,1);
+  this.say=`geometry rebuilt from propagation delays alone ${c>0.5?`matches the picture's own layout (r=${fmt(c,2)}) — signal travels through the image`:`does NOT match the picture (r=${fmt(c,2)}) — whatever couples these regions is not spatial adjacency`}`;
+ }});
+
+lens({id:"ptol",era:"anc",name:"Chords",who:"Ptolemy, ~150 AD",
+ run(){
+  if(!S.phaseFit||!S.peaksTrusted){this.say="no dominant rhythm to phase-lock onto";this.score=0;return;}
+  const {kx,ky,r2,speed}=S.phaseFit;
+  this.score=clamp(r2,0,1);
+  this.say=r2>0.5
+    ? (S.phaseFit.aliased
+       ? `phases lie on a consistent cycle (coherence ${fmt(r2,2)}) but the spatial wavelength is near the region grid — travelling, speed unresolvable at ${GW}×${GH}`
+       : `phases lie on one consistent cycle across space — a travelling disturbance, ${fmt(speed,1)} cells/s toward ${fmt(Math.atan2(-ky,-kx)*57.3,0)}°`)
+    : `phases do not lie on a cycle (coherence ${fmt(r2,2)}) — the rhythm is standing or local, not travelling`;
+ }});
+
+lens({id:"egypt",era:"anc",name:"Unit fractions",who:"Ahmes papyrus, ~1550 BC",
+ run(){
+  const b=L.find(x=>x.id==="ratio").best;
+  if(!b){this.say="no ratio yet";this.score=0;return;}
+  let r=b.r%1, out=[], guard=0;
+  while(r>1e-3&&guard++<5){ const d=Math.ceil(1/r); out.push(d); r-=1/d; }
+  this.score=clamp(1-(out.length-1)/4,0,1);
+  this.say=`the measured ratio's tail = ${out.map(d=>"1/"+d).join(" + ")}${out.length<=2?" — a short, cheap description":" — long, so probably not a real ratio"}`;
+ }});
+
+lens({id:"means",era:"anc",name:"Three means",who:"Nicomachus, ~100 AD",
+ run(){
+  const v=S.regVar; if(!v){this.score=0;return;}
+  let A=0,H=0,G=0,n=0;
+  for(let i=0;i<NREG;i++){ const x=Math.max(v[i],1e-7); A+=x; H+=1/x; G+=Math.log(x); n++; }
+  A/=n; H=n/H; G=Math.exp(G/n);
+  this.A=A;this.H=H;this.G=G; this.bn=A/H;
+  this.score=clamp(1-Math.min(this.bn,20)/20,0,1);
+  this.say=`activity spread A/H = ${fmt(this.bn,1)} · ${this.bn>6?"a few regions carry almost everything — there is a bottleneck":"activity is shared evenly across the field"}`;
+ }});
+
+lens({id:"exhaust",era:"anc",name:"Exhaustion",who:"Eudoxus / Archimedes",
+ run(){
+  const pk=S.peaks; if(!pk||!pk.length){this.say="nothing to bracket";return;}
+  if(!S.peaksTrusted){ this.score=0; this.say=`no rhythm stands clearly above the background${S.peaks&&S.peaks.length?` (best peak only ${fmt(S.peaks[0].snr,1)}× its neighbours)`:""} — nothing here to measure`; return; }
+  const P=1/pk[0].f, u=P*0.12;
+  if(!this.lo||P<this.lo-3*u||P>this.hi+3*u){ this.lo=P-u; this.hi=P+u; this.reset=(this.reset||0)+1; }
+  else { this.lo=Math.max(this.lo,P-u); this.hi=Math.min(this.hi,P+u); }
+  const w=this.hi-this.lo;
+  this.score=clamp(1-w/(P*0.25),0,1);
+  this.say=`the dominant period is trapped: ${fmt(this.lo,3)} s < P < ${fmt(this.hi,3)} s · interval width ${fmt(w*1000,0)} ms after ${this.reset||1} restart(s)`;
+ }});
+
+lens({id:"simil",era:"anc",name:"Similarity",who:"Euclid, Book VI",
+ run(){
+  if(!S.pcaVec){this.score=0;return;}
+  const u=S.pcaVec[0]; let hit=0;
+  for(let r=0;r<NREG;r++) if(Math.abs(S.loadCorr[r])>0.6) hit++;
+  this.frac=hit/NREG;
+  this.score=clamp(this.frac,0,1);
+  this.say=`${hit} of ${NREG} regions collapse onto one curve after rescaling — ${this.frac>0.5?"one process at many amplitudes":"genuinely different processes in different places"}`;
+ }});
+
+lens({id:"rule3",era:"anc",name:"Rule of three",who:"medieval merchants",
+ run(){
+  const m=S.regMean, v=S.regVar; if(!m||!v){this.score=0;return;}
+  const a=Float64Array.from(m), b=Float64Array.from(v);
+  const c=corr(a,b);
+  let num=0,den=0; for(let i=0;i<NREG;i++){ num+=a[i]*b[i]; den+=a[i]*a[i]; }
+  this.k=den?num/den:0; this.r=c;
+  this.score=clamp(Math.abs(c),0,1);
+  this.say=`fluctuation ∝ brightness at k=${fmt(this.k,4)} (r=${fmt(c,2)}) — ${c>0.6?"noise is multiplicative, as photon counting demands":"fluctuation is not proportional to level; something else drives it"}`;
+ }});
+
+lens({id:"recip",era:"anc",name:"Reciprocals",who:"Babylon, ~1800 BC",
+ run(){
+  const idx=S.topVar; if(!idx||idx.length<4){this.score=0;return;}
+  let best={c:0,i:0,j:0};
+  for(let a=0;a<Math.min(6,idx.length);a++)for(let b=0;b<Math.min(6,idx.length);b++){
+    if(a===b) continue;
+    const A=sliceReg(idx[a],128), B=sliceReg(idx[b],128);
+    const inv=new Float64Array(128); for(let t=0;t<128;t++) inv[t]=1/(A[t]+0.02);
+    const c=corr(zscore(detrend(inv)),zscore(detrend(B)));
+    if(c>best.c) best={c,i:idx[a],j:idx[b]};
+  }
+  this.best=best; this.score=clamp(best.c,0,1);
+  this.say=best.c>0.5
+    ? `region ${best.j} tracks 1/region ${best.i} (r=${fmt(best.c,2)}) — a see-saw, not a shared drive`
+    : `no reciprocal pairing stronger than r=${fmt(best.c,2)}`;
+ }});
+
+/* ---------------- MODERN ---------------- */
+
+lens({id:"fourier",era:"mod",name:"Fourier",who:"1822",
+ run(){
+  const pk=S.peaks;
+  if(!pk||!pk.length){this.say="warming up";this.score=0;return;}
+  if(!S.peaksTrusted){ this.score=0; this.say=`nothing periodic — the strongest peak (${fmt(pk[0].f,2)} Hz) is only ${fmt(pk[0].snr,1)}× its neighbours, which is what noise looks like`; return; }
+  this.score=clamp(S.specSharp,0,1);
+  this.say=`peak ${fmt(pk[0].f,2)} Hz (${fmt(pk[0].f*60,0)}/min), ${fmt(pk[0].snr,1)}× above its neighbours${pk[1]?` · then ${fmt(pk[1].f,2)} Hz`:""}`;
+ }});
+
+lens({id:"aper",era:"mod",name:"Aperiodic slope",who:"1/f, 1925→2020",
+ run(){
+  if(!S.spec){this.score=0;return;}
+  const m=S.spec, f=S.specF; const xs=[],ys=[];
+  for(let k=2;k<m.length*0.75;k++){ if(m[k]>0){ xs.push(Math.log(f[k])); ys.push(Math.log(m[k])); } }
+  if(xs.length<8){this.score=0;return;}
+  const n=xs.length; let sx=0,sy=0,sxx=0,sxy=0;
+  for(let i=0;i<n;i++){sx+=xs[i];sy+=ys[i];sxx+=xs[i]*xs[i];sxy+=xs[i]*ys[i];}
+  const b=(n*sxy-sx*sy)/(n*sxx-sx*sx||1e-9), a=(sy-b*sx)/n;
+  let ss=0,st=0; const my=sy/n;
+  for(let i=0;i<n;i++){ ss+=(ys[i]-(a+b*xs[i]))**2; st+=(ys[i]-my)**2; }
+  this.slope=-b; this.r2=1-ss/(st||1e-9);
+  this.score=clamp(this.r2,0,1);
+  this.say=`background falls as 1/f^${fmt(this.slope,2)} (fit ${fmt(this.r2,2)}) — ${this.slope>1.4?"heavily smoothed / integrated":this.slope<0.4?"close to white; little memory":"scale-free-ish"}`;
+ }});
+
+lens({id:"flow",era:"mod",name:"Optical flow",who:"Horn & Schunck, 1981",
+ run(){
+  const F=S.fine,P=S.finePrev,B=4,R=3; let sx=0,sy=0,n=0,div=0,curl=0;
+  for(let by=0;by<GH;by++)for(let bx=0;bx<GW;bx++){
+    let best=1e18,bdx=0,bdy=0;
+    for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){
+      let e=0;
+      for(let y=0;y<B;y++)for(let x=0;x<B;x++){
+        const X=bx*B+x, Y=by*B+y, X2=clamp(X+dx,0,FW-1), Y2=clamp(Y+dy,0,FH-1);
+        const d=F[Y*FW+X]-P[Y2*FW+X2]; e+=d*d;
+      }
+      if(e<best){best=e;bdx=dx;bdy=dy;}
+    }
+    S.flow[(by*GW+bx)*2]=bdx; S.flow[(by*GW+bx)*2+1]=bdy;
+    sx+=bdx;sy+=bdy;n++;
+  }
+  for(let by=1;by<GH-1;by++)for(let bx=1;bx<GW-1;bx++){
+    const i=(by*GW+bx)*2;
+    div+=(S.flow[i+2]-S.flow[i-2])+(S.flow[i+GW*2+1]-S.flow[i-GW*2+1]);
+    curl+=(S.flow[i+GW*2]-S.flow[i-GW*2])-(S.flow[i+2+1]-S.flow[i-2+1]);
+  }
+  this.mx=sx/n*S.fps; this.my=sy/n*S.fps; this.div=div/n; this.curl=curl/n;
+  this.mag=Math.hypot(this.mx,this.my);
+  this.score=clamp(this.mag/8,0,1);
+  this.say=this.mag<0.4
+    ? `no coherent motion (${fmt(this.mag,2)} cell/s) — the scene is standing still`
+    : `bulk drift ${fmt(this.mag,1)} cell/s toward ${fmt(Math.atan2(-this.my,this.mx)*57.3,0)}° · divergence ${fmt(this.div,2)}, rotation ${fmt(this.curl,2)}`;
+ }});
+
+lens({id:"pca",era:"mod",name:"Modes (PCA)",who:"Pearson, 1901",
+ run(){
+  if(!S.pcaVal){this.score=0;return;}
+  let s=0,s2=0; for(const v of S.pcaVal){ const x=Math.max(v,0); s+=x; s2+=x*x; }
+  const PR=s*s/(s2||1e-9);
+  this.PR=PR; this.top=S.pcaVal[0]/(s||1e-9);
+  this.score=clamp(1-PR/NREG,0,1);
+  this.say=`${fmt(PR,1)} effective dimensions out of ${NREG} · leading mode holds ${fmt(this.top*100,0)}% — ${PR<4?"the whole field is doing almost one thing":PR>18?"many semi-independent regions":"a handful of semi-independent regions"}`;
+ }});
+
+lens({id:"graph",era:"mod",name:"Graph frequency",who:"Huang et al., 2016",
+ run(){
+  if(!S.gVal||!S.gCoef){this.score=0;return;}
+  const c=S.gCoef, v=S.gVal;
+  let lo=0,hi=0,tot=0;
+  const mid=v[Math.floor(v.length/2)];
+  for(let i=0;i<c.length;i++){ const e=c[i]*c[i]; tot+=e; (v[i]<=mid?lo+=e:hi+=e); }
+  this.smooth=lo/(tot||1e-9);
+  this.score=clamp(this.smooth,0,1);
+  this.say=`${fmt(this.smooth*100,0)}% of the pattern's energy sits in smooth graph modes — ${this.smooth>0.7?"neighbouring regions are moving together, broad cooperative organisation":"activity changes sharply across the connectivity, specialised/local organisation"}`;
+ }});
+
+lens({id:"koop",era:"mod",name:"Operator (Koopman)",who:"1931 / DMD 2010",
+ run(){
+  if(!S.pcaScores){this.score=0;return;}
+  const out=[];
+  for(let m=0;m<Math.min(3,S.pcaScores.length);m++){
+    const a=S.pcaScores[m], n=a.length;
+    let s11=0,s12=0,s22=0,b1=0,b2=0;
+    for(let t=2;t<n;t++){
+      const x1=a[t-1],x2=a[t-2],y=a[t];
+      s11+=x1*x1;s12+=x1*x2;s22+=x2*x2;b1+=x1*y;b2+=x2*y;
+    }
+    const D=s11*s22-s12*s12||1e-9;
+    const p=(b1*s22-b2*s12)/D, q=(b2*s11-b1*s12)/D;
+    const disc=p*p+4*q;
+    let mag,fr;
+    if(disc<0){ mag=Math.sqrt(-q); fr=Math.atan2(Math.sqrt(-disc)/2,p/2)*S.fps/(2*Math.PI); }
+    else { const r1=(p+Math.sqrt(disc))/2, r2=(p-Math.sqrt(disc))/2; mag=Math.max(Math.abs(r1),Math.abs(r2)); fr=0; }
+    const tau=mag>0&&mag<1?-1/(S.fps*Math.log(mag)):Infinity;
+    out.push({mag,fr,tau});
+  }
+  this.modes=out;
+  const m0=out[0];
+  this.score=clamp(m0.mag>1?0.2:m0.mag,0,1);
+  this.say=out.map((o,i)=>`m${i+1}: ${o.fr>0.02?`${fmt(o.fr,2)} Hz ringing`:"non-oscillatory"}, memory ${isFinite(o.tau)?fmt(o.tau,2)+" s":"unbounded"}${o.mag>=1?" (growing!)":""}`).join(" · ");
+ }});
+
+lens({id:"info",era:"mod",name:"Information",who:"Shannon, 1948",
+ run(){
+  const h=new Float64Array(32); const f=S.fine;
+  for(let i=0;i<f.length;i++) h[clamp((f[i]*32)|0,0,31)]++;
+  let H=0; for(let i=0;i<32;i++){ const p=h[i]/f.length; if(p>0) H-=p*Math.log2(p); }
+  this.H=H;
+  // directed prediction between the two most coupled regions
+  let bi=0,bj=1,bc=0;
+  if(S.corr) for(let i=0;i<NREG;i++)for(let j=i+1;j<NREG;j++){
+    const c=Math.abs(S.corr[i*NREG+j]); if(c>bc){bc=c;bi=i;bj=j;}
+  }
+  const A=zscore(detrend(sliceReg(bi,WIN))), B=zscore(detrend(sliceReg(bj,WIN)));
+  const g=(src,dst)=>{
+    let s11=0,s12=0,s22=0,b1=0,b2=0,vy=0;
+    for(let t=1;t<WIN;t++){ const x1=dst[t-1],x2=src[t-1],y=dst[t];
+      s11+=x1*x1;s12+=x1*x2;s22+=x2*x2;b1+=x1*y;b2+=x2*y;vy+=y*y; }
+    const D=s11*s22-s12*s12||1e-9;
+    const p=(b1*s22-b2*s12)/D, q=(b2*s11-b1*s12)/D;
+    let e2=0,e1=0; const p1=b1/(s11||1e-9);
+    for(let t=1;t<WIN;t++){ e2+=(dst[t]-p*dst[t-1]-q*src[t-1])**2; e1+=(dst[t]-p1*dst[t-1])**2; }
+    return Math.max(0,0.5*Math.log(e1/(e2||1e-9)));
+  };
+  const ab=g(A,B), ba=g(B,A);
+  this.ab=ab;this.ba=ba;this.bi=bi;this.bj=bj;
+  this.score=clamp(Math.abs(ab-ba)*4,0,1);
+  this.say=`entropy ${fmt(H,2)} bits/cell · strongest pair ${bi}↔${bj}: ${bi}→${bj} carries ${fmt(ab,3)} nats, back ${fmt(ba,3)} — ${Math.abs(ab-ba)>0.02?(ab>ba?`${bi} leads`:`${bj} leads`):"no direction; they share a common cause"}`;
+ }});
+
+lens({id:"recur",era:"mod",name:"Recurrence",who:"Poincaré 1890 / Eckmann 1987",
+ run(){
+  const x=zscore(detrend(slice(S.gHist,WIN)));
+  const lag=Math.max(1,Math.round(S.fps/8)), N=WIN-2*lag, M=Math.min(130,N);
+  const step=Math.max(1,Math.floor(N/M));
+  const build=(v)=>{
+    const P=[]; for(let t=0;t<N;t+=step) P.push([v[t],v[t+lag],v[t+2*lag]]);
+    const m=P.length, d=[];
+    for(let i=0;i<m;i++)for(let j=i+1;j<m;j++)
+      d.push(Math.hypot(P[i][0]-P[j][0],P[i][1]-P[j][1],P[i][2]-P[j][2]));
+    d.sort((a,b)=>a-b);
+    const eps=d[Math.floor(d.length*0.10)]||0.1;
+    const R=(i,j)=>Math.hypot(P[i][0]-P[j][0],P[i][1]-P[j][1],P[i][2]-P[j][2])<eps;
+    let rec=0,diag=0,tot=0;
+    for(let i=0;i<m;i++)for(let j=0;j<m;j++){ if(i===j) continue; tot++;
+      if(R(i,j)){ rec++; if(i+1<m&&j+1<m&&R(i+1,j+1)) diag++; } }
+    return {rr:rec/tot, det:rec?diag/rec:0};
+  };
+  const real=build(x);
+  // null model: same values, order destroyed. Determinism above this is real structure.
+  const sh=Float64Array.from(x);
+  for(let i=sh.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const t=sh[i];sh[i]=sh[j];sh[j]=t; }
+  const surr=build(sh);
+  this.rr=real.rr; this.det=real.det; this.null=surr.det;
+  this.excess=real.det-surr.det;
+  this.score=clamp(this.excess/0.5,0,1);
+  this.say=`determinism ${fmt(real.det*100,0)}% against a shuffled null of ${fmt(surr.det*100,0)}% — ${this.excess>0.3?"the trajectory really does return and then repeat":this.excess>0.12?"weak repeatable structure":"no more structure than shuffling the same numbers gives"}`;
+ }});
+
+lens({id:"pulse",era:"mod",name:"Pulse (rPPG)",who:"Verkruysse, 2008",
+ run(){
+  if(S.n<300){this.say="needs ~10 s of signal";this.score=0;return;}
+  const g=zscore(detrend(slice(S.ggHist,WIN))), r=zscore(detrend(slice(S.grHist,WIN)));
+  const x=new Float64Array(WIN); for(let i=0;i<WIN;i++) x[i]=3*r[i]-2*g[i];
+  const K=Math.min(120,WIN/2|0), sp=dft(hann(x),K);
+  const df=S.fps/WIN;
+  let bp=-1,bm=0,med=[];
+  for(let k=0;k<K;k++){ const f=(k+1)*df; if(f>0.7&&f<3.2){ med.push(sp.mag[k]); if(sp.mag[k]>bm){bm=sp.mag[k];bp=f;} } }
+  med.sort((a,b)=>a-b);
+  const snr=med.length?bm/(med[Math.floor(med.length/2)]||1e-9):0;
+  // control: the same test on plain brightness. Blood shows in colour, not in luminance.
+  const lz=zscore(detrend(slice(S.gHist,WIN))), sl=dft(hann(lz),K);
+  let lm=0,lmed=[];
+  for(let k=0;k<K;k++){ const f=(k+1)*df; if(f>0.7&&f<3.2){ lmed.push(sl.mag[k]); if(sl.mag[k]>lm) lm=sl.mag[k]; } }
+  lmed.sort((a,b)=>a-b);
+  const lsnr=lmed.length?lm/(lmed[Math.floor(lmed.length/2)]||1e-9):0;
+  const specific=snr>lsnr*1.6;
+  this.bpm=bp*60; this.snr=snr; this.lsnr=lsnr; this.specific=specific;
+  this.score=clamp(specific?(snr-2)/6:0,0,1);
+  this.say=(snr>3.5&&specific)
+    ? `a ${fmt(this.bpm,0)} bpm rhythm in red-minus-green, ${fmt(snr,1)}× above the band and ${fmt(snr/lsnr,1)}× stronger than in plain brightness — consistent with blood in living skin`
+    : (snr>3.5&&!specific)
+      ? `there is a ${fmt(this.bpm,0)} bpm rhythm, but brightness carries it just as strongly (${fmt(lsnr,1)}×) — it is something moving or flickering, not blood`
+      : `no cardiac-band rhythm (best ${fmt(this.bpm,0)} bpm at only ${fmt(snr,1)}×)`;
+ }});
+
+lens({id:"resid",era:"mod",name:"Structured residual",who:"the part no story explains",
+ run(){
+  if(!S.resid){this.score=0;return;}
+  let bi=0; for(let i=1;i<NREG;i++) if(S.resid[i]>S.resid[bi]) bi=i;
+  this.worst=bi; this.val=S.resid[bi];
+  let mean=0; for(let i=0;i<NREG;i++) mean+=S.resid[i]; mean/=NREG;
+  this.excess=this.val/(mean||1e-9);
+  this.score=clamp((this.excess-1)/3,0,1);
+  this.say=this.excess>1.8
+    ? `region (${bi%GW},${(bi/GW)|0}) is left over by every mode AND its leftovers are still autocorrelated (${fmt(this.val,2)}, ${fmt(this.excess,1)}× the field) — look there next`
+    : `nothing structured is being left behind (peak ${fmt(this.excess,1)}× mean)`;
+ }});
+
+lens({id:"micro",era:"mod",name:"Microstates",who:"Lehmann 1987 / Zanesco 2026",
+ run(){
+  if(!S.micro){this.score=0;return;}
+  const dw=S.microDwell/S.fps;
+  const counts=[0,0,0,0]; for(const s of S.microSeq) counts[s]++;
+  const tot=S.microSeq.length||1;
+  this.score=clamp(dw/2,0,1);
+  this.say=`state ${S.microIdx+1} of 4, held ${fmt(dw,1)} s · occupancy ${counts.map(c=>Math.round(c/tot*100)+"%").join("/")} — ${dw>1.2?"configurations are quasi-stable, the spectrum you see may be their shadow":"configurations are switching fast"}`;
+ }});
+
+lens({id:"probe",era:"mod",name:"Active probe",who:"HeadAsResonator, 2026",
+ run(){
+  const p=S.probe;
+  if(!p.on){this.say="off — turn it on to send a known sequence into the room and measure what comes back";this.score=0;return;}
+  this.score=clamp(Math.abs(p.r),0,1);
+  this.say=Math.abs(p.r)>0.25
+    ? `the room answers: gain ${fmt(p.gain,3)}, delay ${fmt(p.delay*1000,0)} ms, r=${fmt(p.r,2)}, up/down asymmetry ${fmt(p.asym,2)}${Math.abs(p.asym)>0.25?" — the path is nonlinear (auto-exposure or a saturating surface)":" — the path is close to linear"}`
+    : `nothing of my sequence has come back yet (r=${fmt(p.r,2)}) — the camera cannot see anything this panel lights`;
+ }});
+
+/* ================================================================
+   CAPTURE
+   ================================================================ */
+const vid=document.getElementById("vid");
+const cap=document.createElement("canvas"); cap.width=FW; cap.height=FH;
+const cctx=cap.getContext("2d",{willReadFrequently:true});
+const ov=document.getElementById("ov"), octx=ov.getContext("2d");
+
+let stream=null;
+
+function srcNote(txt){ document.getElementById("srcinfo").textContent=txt; }
+function alarm(txt){
+  const a=document.getElementById("blackAlarm");
+  if(!txt){ a.classList.remove("on"); a.textContent=""; return; }
+  a.classList.add("on"); a.innerHTML=txt;
+}
+
+async function listCams(){
+  try{
+    const ds=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==="videoinput");
+    const sel=document.getElementById("camsel");
+    const cur=sel.value;
+    sel.innerHTML=ds.map((d,i)=>`<option value="${d.deviceId}">${i}: ${d.label||("camera "+i)}</option>`).join("")
+      || '<option value="">no camera found</option>';
+    if(cur) sel.value=cur;
+    return ds;
+  }catch(e){ return []; }
+}
+
+async function attach(s,label,isFile){
+  if(stream) stream.getTracks().forEach(t=>t.stop());
+  stream=isFile?null:s;
+  if(isFile){ vid.srcObject=null; vid.src=s; vid.loop=true; }
+  else { vid.src=""; vid.srcObject=s; }
+  try{ await vid.play(); }catch(e){}
+  await new Promise(r=>{ if(vid.videoWidth) return r();
+    vid.onloadedmetadata=()=>r(); setTimeout(r,2500); });
+  document.getElementById("noCam").style.display="none";
+  S.blackRun=0; alarm("");
+  const tl=(!isFile&&s.getVideoTracks&&s.getVideoTracks()[0])?s.getVideoTracks()[0].label:"";
+  S.srcLabel=label+(tl?" — "+tl:"");
+  srcNote(`${S.srcLabel} · ${vid.videoWidth}×${vid.videoHeight}`);
+  logit("source: "+S.srcLabel,"m");
+  if(!S.running){ S.running=true; S.t0=performance.now(); requestAnimationFrame(tick); }
+}
+
+const tvid=document.createElement("video");
+tvid.muted=true; tvid.playsInline=true; tvid.autoplay=true; tvid.setAttribute("playsinline","");
+const tcan=document.createElement("canvas"); tcan.width=32; tcan.height=24;
+const tcx=tcan.getContext("2d",{willReadFrequently:true});
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+
+function renderProbe(rows,busy){
+  const el=document.getElementById("probeReport");
+  el.classList.add("on");
+  el.innerHTML=rows.map(r=>{
+    const lit=r.lum!==null&&r.lum>0.012;
+    const v=r.err?("failed — "+r.err):(r.lum===null?"…":fmt(r.lum*100,1)+"% light");
+    return `<div class="crow ${r.err?"":(lit?"lit":"dark")}">
+      <span class="ix">${r.i}</span>
+      <span>${r.label}<br><span style="color:#6d8291;font-size:10px">${r.res}${r.err?"":(lit?" · sees light":" · black")}</span></span>
+      <span class="lum">${v}</span>
+      ${r.err?"<span></span>":`<button data-devid="${r.id}">use</button>`}
+    </div>`;
+  }).join("")+(busy?'<div class="note">testing…</div>':
+    '<div class="note">Index matches the order the browser reports devices in. "% light" is the mean brightness this device actually delivered.</div>');
+  el.querySelectorAll("button[data-devid]").forEach(b=>b.onclick=()=>start(b.dataset.devid));
+}
+
+async function probeCameras(){
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  S.running=false;
+  let ds=await listCams();
+  if(!ds.length||!ds[0].deviceId){
+    try{ const s=await navigator.mediaDevices.getUserMedia({video:true}); s.getTracks().forEach(t=>t.stop()); }
+    catch(e){ logit("cannot test cameras without permission: "+e.message,"h"); return; }
+    ds=await listCams();
+  }
+  logit(`${ds.length} video device(s): `+ds.map((d,i)=>`${i}=${d.label||"unnamed"}`).join(" · "),"a");
+  const rows=[];
+  for(let i=0;i<ds.length;i++){
+    const d=ds[i];
+    const r={i,label:d.label||("camera "+i),id:d.deviceId,lum:null,res:"—",err:null};
+    rows.push(r); renderProbe(rows,true);
+    try{
+      const s=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:d.deviceId}}});
+      tvid.srcObject=s;
+      await tvid.play().catch(()=>{});
+      await new Promise(res=>{ if(tvid.videoWidth) return res(); tvid.onloadedmetadata=()=>res(); setTimeout(res,2200); });
+      await wait(500);                       // let auto-exposure settle
+      let best=0;
+      for(let k=0;k<5;k++){
+        if(tvid.videoWidth){
+          tcx.drawImage(tvid,0,0,32,24);
+          const im=tcx.getImageData(0,0,32,24).data; let m=0;
+          for(let q=0;q<im.length;q+=4) m+=(im[q]+im[q+1]+im[q+2])/3;
+          m/=(im.length/4)*255; if(m>best) best=m;
+        }
+        await wait(130);
+      }
+      r.lum=best; r.res=tvid.videoWidth+"×"+tvid.videoHeight;
+      tvid.srcObject=null; s.getTracks().forEach(t=>t.stop());
+    }catch(e){ r.err=e.name||e.message; }
+    renderProbe(rows,i<ds.length-1);
+  }
+  const good=rows.filter(r=>r.lum!==null&&r.lum>0.012).sort((a,b)=>b.lum-a.lum)[0];
+  if(good){ logit(`camera ${good.i} is the one that sees light (${fmt(good.lum*100,1)}%) — opening it`,"m"); start(good.id); }
+  else logit("no camera delivered light — try screen share or a video file","h");
+}
+
+async function start(deviceId){
+  try{
+    let s;
+    try{
+      const c=deviceId?{deviceId:{exact:deviceId}}:{width:{ideal:640},height:{ideal:480}};
+      s=await navigator.mediaDevices.getUserMedia({video:c,audio:false});
+    }catch(e1){
+      if(!deviceId) throw e1;
+      logit("exact device request refused ("+(e1.name||e1.message)+"), retrying loosely","h");
+      s=await navigator.mediaDevices.getUserMedia({video:{deviceId:{ideal:deviceId}},audio:false});
+    }
+    await attach(s,"camera",false);
+    await listCams();
+    const t=s.getVideoTracks()[0];
+    if(t&&t.getSettings&&t.getSettings().deviceId) document.getElementById("camsel").value=t.getSettings().deviceId;
+  }catch(e){
+    document.getElementById("noCam").style.display="flex";
+    document.getElementById("noCam").innerHTML="camera refused: "+e.message+
+      "<br><span style='font-size:10px'>allow camera access, or use <b>Share a screen</b> / <b>Open a video file</b> instead</span>";
+    logit("camera refused: "+e.message,"h");
+  }
+}
+
+async function startScreen(){
+  try{
+    const s=await navigator.mediaDevices.getDisplayMedia({video:true,audio:false});
+    await attach(s,"screen",false);
+  }catch(e){ logit("screen share refused: "+e.message,"h"); }
+}
+
+let lastT=0;
+function tick(now){
+  if(!S.running) return;
+  requestAnimationFrame(tick);
+  if(S.paused) return;
+  if(!vid.videoWidth||vid.readyState<2) return;   // nothing decoded yet
+  const dt=(now-lastT)/1000; if(dt<0.028) return;
+  lastT=now;
+  S.fps=S.fps?S.fps*0.9+0.1/dt:1/dt;
+  S.frames++;
+
+  cctx.drawImage(vid,0,0,FW,FH);
+  const im=cctx.getImageData(0,0,FW,FH).data;
+  S.finePrev.set(S.fine);
+  let gm=0,rr=0,gg=0,bb=0;
+  for(let i=0,p=0;i<FW*FH;i++,p+=4){
+    const r=im[p]/255,g=im[p+1]/255,b=im[p+2]/255;
+    const y=0.2126*r+0.7152*g+0.0722*b;
+    S.fine[i]=y; gm+=y; rr+=r; gg+=g; bb+=b;
+  }
+  const N=FW*FH; gm/=N;rr/=N;gg/=N;bb/=N;
+
+  // watchdog: frames are arriving but carry no light. Say so, do not analyse the dark.
+  if(gm<0.012){ S.blackRun=(S.blackRun||0)+1; } else if(S.blackRun){ S.blackRun=0; alarm(""); }
+  if(S.blackRun===45){
+    alarm("<b>Frames are arriving but they are black</b> (mean luminance "+fmt(gm,4)+"). "+
+      "The stream is open, the sensor is giving nothing. Most likely this is the wrong device — on Windows the "+
+      "infrared Hello camera and virtual cameras both look like this. Press <b>Test every camera</b> — it opens each one, measures how much light it delivers, and switches to the one that works. Or "+
+      "check the privacy shutter and close whatever else is holding the camera. Every number below is measuring darkness until then.");
+    logit("black frames — stream open, no light reaching the sensor","h");
+  }
+
+  // coarse regions
+  const bw=FW/GW, bh=FH/GH;
+  for(let by=0;by<GH;by++)for(let bx=0;bx<GW;bx++){
+    let s=0;
+    for(let y=0;y<bh;y++)for(let x=0;x<bw;x++) s+=S.fine[(by*bh+y)*FW+bx*bw+x];
+    S.hist[by*GW+bx][S.hp]=s/(bw*bh);
+  }
+  S.gHist[S.hp]=gm; S.grHist[S.hp]=rr; S.ggHist[S.hp]=gg; S.gbHist[S.hp]=bb;
+  S.drive[S.hp]=S.probe.on?S.probe.last:0;
+  S.hp=(S.hp+1)%NBUF; S.n=Math.min(S.n+1,NBUF);
+
+  runLens("moment"); runLens("flow"); runLens("apollo"); runLens("info");
+  if(S.probe.on) probeAnalyse();
+  drawOverlay();
+  if(S.frames%15===0) fastPanel();
+}
+
+/* ---------------- heavy analysis (≈1 Hz) ---------------- */
+function heavy(){
+  if(!S.running||S.paused||S.n<WIN) return;
+  const Z=[], mean=new Float64Array(NREG), vari=new Float64Array(NREG);
+  for(let r=0;r<NREG;r++){
+    const x=sliceReg(r,WIN); let m=0; for(let i=0;i<WIN;i++) m+=x[i]; m/=WIN;
+    let v=0; for(let i=0;i<WIN;i++) v+=(x[i]-m)**2; v/=WIN;
+    mean[r]=m; vari[r]=v;
+    Z.push(zscore(detrend(x)));
+  }
+  S.regMean=mean; S.regVar=vari;
+  S.topVar=Array.from({length:NREG},(_,i)=>i).sort((a,b)=>vari[b]-vari[a]);
+
+  // covariance / correlation
+  const C=new Float64Array(NREG*NREG);
+  for(let i=0;i<NREG;i++)for(let j=i;j<NREG;j++){
+    let s=0; for(let t=0;t<WIN;t++) s+=Z[i][t]*Z[j][t];
+    C[i*NREG+j]=C[j*NREG+i]=s/WIN;
+  }
+  S.corr=C;
+
+  // PCA
+  const E=jacobi(C,NREG,7);
+  S.pcaVal=E.vals; S.pcaVec=E.vecs;
+  S.pcaScores=[];
+  for(let m=0;m<3;m++){
+    const a=new Float64Array(WIN);
+    for(let t=0;t<WIN;t++){ let s=0; for(let r=0;r<NREG;r++) s+=E.vecs[m][r]*Z[r][t]; a[t]=s; }
+    S.pcaScores.push(a);
+  }
+  S.loadCorr=new Float64Array(NREG);
+  for(let r=0;r<NREG;r++) S.loadCorr[r]=corr(Z[r],S.pcaScores[0]);
+
+  // residual after top-4 modes, then: is what's left still structured?
+  const K=4, rec=Array.from({length:NREG},()=>new Float64Array(WIN));
+  const sc=[];
+  for(let m=0;m<K;m++){
+    const a=new Float64Array(WIN);
+    for(let t=0;t<WIN;t++){ let s=0; for(let r=0;r<NREG;r++) s+=E.vecs[m][r]*Z[r][t]; a[t]=s; }
+    sc.push(a);
+  }
+  for(let r=0;r<NREG;r++)for(let t=0;t<WIN;t++){
+    let s=0; for(let m=0;m<K;m++) s+=E.vecs[m][r]*sc[m][t];
+    rec[r][t]=Z[r][t]-s;
+  }
+  S.resid=new Float32Array(NREG);
+  for(let r=0;r<NREG;r++){
+    const e=rec[r]; let v=0,ac=0;
+    for(let t=0;t<WIN;t++) v+=e[t]*e[t];
+    for(let t=3;t<WIN;t++) ac+=e[t]*e[t-3];
+    S.resid[r]=v>1e-9?Math.abs(ac/v)*Math.sqrt(v):0;
+  }
+
+  // graph Fourier: connectivity built from the data, not assumed
+  const W=new Float64Array(NREG*NREG), deg=new Float64Array(NREG);
+  for(let i=0;i<NREG;i++)for(let j=0;j<NREG;j++){
+    if(i===j) continue;
+    const w=Math.max(0,C[i*NREG+j])**2; W[i*NREG+j]=w; deg[i]+=w;
+  }
+  const Lm=new Float64Array(NREG*NREG);
+  for(let i=0;i<NREG;i++)for(let j=0;j<NREG;j++){
+    const di=Math.sqrt(deg[i]||1e-9), dj=Math.sqrt(deg[j]||1e-9);
+    Lm[i*NREG+j]=(i===j?1:0)-W[i*NREG+j]/(di*dj);
+  }
+  const GE=jacobi(Lm,NREG,7);
+  S.gVal=GE.vals.slice().reverse(); S.gVec=GE.vecs.slice().reverse(); // ascending
+  const x=new Float64Array(NREG);
+  for(let r=0;r<NREG;r++) x[r]=Z[r][WIN-1];
+  S.gCoef=new Float64Array(NREG);
+  for(let i=0;i<NREG;i++){ let s=0; for(let r=0;r<NREG;r++) s+=S.gVec[i][r]*x[r]; S.gCoef[i]=s; }
+
+  // global spectrum + peaks
+  const Kb=Math.min(120,WIN/2|0), sp=dft(hann(zscore(detrend(slice(S.gHist,WIN)))),Kb);
+  const df=S.fps/WIN;
+  S.spec=sp.mag; S.specF=Array.from({length:Kb},(_,k)=>(k+1)*df);
+  const peaks=[];
+  for(let k=1;k<Kb-1;k++){
+    if(sp.mag[k]>sp.mag[k-1]&&sp.mag[k]>sp.mag[k+1]){
+      let nb=0,c=0; for(let j=Math.max(0,k-6);j<Math.min(Kb,k+7);j++){ if(Math.abs(j-k)>1){nb+=sp.mag[j];c++;} }
+      peaks.push({f:S.specF[k],m:sp.mag[k],snr:sp.mag[k]/((nb/c)||1e-9),k});
+    }
+  }
+  peaks.sort((a,b)=>b.m-a.m);
+  S.peaks=peaks.slice(0,4);
+  // a peak that is not clearly above its own neighbourhood is not a rhythm.
+  // Everything downstream that measures ratios, periods or phases must know this.
+  S.peaksTrusted = S.peaks.length>0 && S.peaks[0].snr>3;
+  let tot=0; for(let k=0;k<Kb;k++) tot+=sp.mag[k];
+  S.specSharp=peaks.length?clamp((peaks[0].m*8)/(tot||1e-9),0,1):0;
+
+  // per-region dominant period + phase (for remainder fusion)
+  S.regPeriods=[];
+  for(const r of S.topVar.slice(0,6)){
+    const s2=dft(hann(Z[r]),Kb);
+    let bk=1; for(let k=1;k<Kb;k++) if(s2.mag[k]>s2.mag[bk]) bk=k;
+    const per=WIN/(bk+1);
+    S.regPeriods.push({r,period:per,phase:((s2.ph[bk]/(2*Math.PI))%1+1)%1,m:s2.mag[bk]});
+  }
+  S.regPeriods.sort((a,b)=>b.m-a.m);
+
+  // phase map at the dominant global frequency -> travelling wave test
+  // (phases wrap, so a least-squares plane fit is wrong; search the phasor sum instead)
+  if(S.peaks.length){
+    const k=S.peaks[0].k, ph=new Float64Array(NREG);
+    for(let r=0;r<NREG;r++){ ph[r]=binPhase(hann(Z[r]),k).ph; S.phase[r]=ph[r]; }
+    const mx=(GW-1)/2, my=(GH-1)/2;
+    let best={s:-1,kx:0,ky:0};
+    for(let kx=-Math.PI;kx<=Math.PI;kx+=0.08)for(let ky=-Math.PI;ky<=Math.PI;ky+=0.08){
+      let sr=0,si=0;
+      for(let r=0;r<NREG;r++){
+        const d=ph[r]-kx*((r%GW)-mx)-ky*(((r/GW)|0)-my);
+        sr+=Math.cos(d); si+=Math.sin(d);
+      }
+      const s=Math.sqrt(sr*sr+si*si)/NREG;
+      if(s>best.s) best={s,kx,ky};
+    }
+    const kk=Math.hypot(best.kx,best.ky);
+    S.phaseFit={kx:best.kx,ky:best.ky,r2:best.s,
+      speed:kk>0.05?2*Math.PI*S.peaks[0].f/(kk/4):Infinity, aliased:kk>2.6};
+  }
+
+  // microstates: online k-means on normalised spatial patterns
+  if(!S.micro){
+    S.micro=[]; for(let i=0;i<4;i++){ const c=new Float64Array(NREG); for(let r=0;r<NREG;r++) c[r]=Math.random()-0.5; S.micro.push(c); }
+  }
+  ["ratio","anthy","dioph","crt","heron","ptol","egypt","means","exhaust","simil","rule3","recip",
+   "fourier","aper","pca","graph","koop","recur","pulse","resid","micro","probe"].forEach(runLens);
+  guessing();
+  drawPlots();
+  renderLenses();
+}
+
+function microStep(){
+  if(!S.micro||S.n<20) return;
+  const x=new Float64Array(NREG); let m=0;
+  for(let r=0;r<NREG;r++){ x[r]=get(r,0); m+=x[r]; } m/=NREG;
+  let nn=0; for(let r=0;r<NREG;r++){ x[r]-=m; nn+=x[r]*x[r]; }
+  nn=Math.sqrt(nn)||1e-9; for(let r=0;r<NREG;r++) x[r]/=nn;
+  let bi=0,bd=-2;
+  for(let i=0;i<4;i++){ let d=0; for(let r=0;r<NREG;r++) d+=x[r]*S.micro[i][r]; if(d>bd){bd=d;bi=i;} }
+  for(let r=0;r<NREG;r++) S.micro[bi][r]+=0.03*(x[r]-S.micro[bi][r]);
+  if(bi===S.microIdx) S.microDwell++; else { S.microDwell=0; S.microIdx=bi; }
+  S.microSeq.push(bi); if(S.microSeq.length>600) S.microSeq.shift();
+}
+
+/* ---------------- probe ---------------- */
+const probePanel=document.getElementById("probePanel");
+function probeStep(){
+  const p=S.probe;
+  const bit=((p.reg>>6)^(p.reg>>5))&1;
+  p.reg=((p.reg<<1)|bit)&0x7f; if(p.reg===0) p.reg=0x7f;
+  p.last=bit?1:-1;
+  probePanel.style.background=bit?"#8a8a8a":"#2e2e2e";
+  probePanel.style.color=bit?"#000":"#777";
+  probePanel.textContent="PROBE DRIVING — "+(bit?"HIGH":"LOW");
+}
+function probeAnalyse(){
+  const L2=Math.min(S.n,400), maxLag=Math.max(4,Math.round(S.fps*0.8));
+  if(L2<120) return;
+  const d=slice(S.drive,L2), y=zscore(detrend(slice(S.gHist,L2)));
+  const dz=zscore(d);
+  let br=0,bl=0;
+  for(let l=0;l<maxLag;l++){
+    let s=0,n=0;
+    for(let t=maxLag;t<L2;t++){ s+=dz[t-l]*y[t]; n++; }
+    const c=s/n; if(Math.abs(c)>Math.abs(br)){br=c;bl=l;}
+  }
+  let hi=0,nh=0,lo=0,nl=0;
+  for(let t=maxLag;t<L2;t++){ if(d[t-bl]>0){hi+=y[t];nh++;} else {lo+=y[t];nl++;} }
+  hi=nh?hi/nh:0; lo=nl?lo/nl:0;
+  S.probe.r=br; S.probe.delay=bl/S.fps; S.probe.gain=(hi-lo)/2;
+  S.probe.asym=(Math.abs(hi)-Math.abs(lo))/((Math.abs(hi)+Math.abs(lo))||1e-9);
+  document.getElementById("probeStat").textContent=
+    `r=${fmt(br,2)} · delay ${fmt(bl/S.fps*1000,0)} ms · gain ${fmt(S.probe.gain,3)}`;
+}
+
+/* ================================================================
+   PECULIARITY — the signature strip
+   ================================================================ */
+function runLens(id){
+  const l=L.find(x=>x.id===id); if(!l) return;
+  try{ l.run(); }catch(e){ l.say="lens failed: "+e.message; l.score=0; }
+  l.hist.push(l.score); if(l.hist.length>80) l.hist.shift();
+  if(l.hist.length>25){
+    let m=0; for(const v of l.hist) m+=v; m/=l.hist.length;
+    let s=0; for(const v of l.hist) s+=(v-m)**2; s=Math.sqrt(s/l.hist.length);
+    l.mu=m; l.sd=Math.max(s,0.02);
+    const wasGlint=l.glint;
+    l.glint = l.score>m+3*l.sd && l.score>0.45;
+    if(l.glint&&!wasGlint) logit(`glint — the world became unexpectedly simple through ${l.name.toLowerCase()} (${fmt(l.score,2)} vs usual ${fmt(m,2)})`,"h");
+  }
+}
+function buildStrip(){
+  const c=document.getElementById("stripbars");
+  c.innerHTML="";
+  L.forEach(l=>{
+    const d=document.createElement("div");
+    d.className="bar"+(l.era==="mod"?" mod":"");
+    d.innerHTML=`<i style="height:2%"></i><b>${l.name} — ${l.who}</b>`;
+    l.el=d.querySelector("i"); l.bar=d;
+    c.appendChild(d);
+  });
+}
+function drawStrip(){
+  let best=null;
+  L.forEach(l=>{
+    l.el.style.height=(2+l.score*98)+"%";
+    l.bar.classList.toggle("glint",!!l.glint);
+    if(!best||l.score>best.score) best=l;
+  });
+  document.getElementById("stripinfo").textContent=
+    best&&best.score>0.15?`simplest through: ${best.name} (${fmt(best.score,2)})`:"nothing is simple yet";
+}
+
+/* ================================================================
+   GUESSES
+   ================================================================ */
+function G(id){ return L.find(x=>x.id===id); }
+function guessing(){
+  const out=[];
+  const pulse=G("pulse"), flow=G("flow"), pca=G("pca"), graph=G("graph"), resid=G("resid"),
+        koop=G("koop"), apollo=G("apollo"), ptol=G("ptol"), ratio=G("ratio"), probe=G("probe"),
+        recur=G("recur"), micro=G("micro"), heron=G("heron"), info=G("info"), aper=G("aper"),
+        rule3=G("rule3"), moment=G("moment");
+
+  if(pulse.snr>3.5&&pulse.specific&&flow.mag<14){
+    out.push({g:`Something alive is in frame — about ${fmt(pulse.bpm,0)} beats per minute`,
+      c:clamp((pulse.snr-3)/6,0,.92),
+      why:`A ${fmt(pulse.bpm,0)} bpm rhythm sits ${fmt(pulse.snr,1)}× above the rest of the 0.7–3.2 Hz band in the red-minus-green channel, which is where haemoglobin absorption shows up — and it is ${fmt(pulse.snr/pulse.lsnr,1)}× weaker in plain brightness, so it is not simply something moving.`,
+      kill:`Kills it: cover the skin, or point at a printed photograph — the peak should vanish. If it survives that, it is lighting or camera AGC, not blood.`,
+      tags:["rPPG","Fourier"]});
+  }
+  if(flow.mag<0.5&&pca.PR<6&&resid.excess<1.8){
+    out.push({g:`A still scene — no actors, only the camera breathing`,
+      c:.75,
+      why:`Bulk motion ${fmt(flow.mag,2)} cell/s, only ${fmt(pca.PR,1)} effective dimensions, and nothing structured is left over after four modes. Almost all variance is one global brightness wobble.`,
+      kill:`Kills it: wave a hand. Effective dimensions should jump and the residual map should light up where the hand is.`,
+      tags:["flow","PCA","residual"]});
+  }
+  if(koop.modes&&koop.modes[0]&&Math.abs(koop.modes[0].fr)<0.05&&isFinite(koop.modes[0].tau)&&koop.modes[0].tau>0.6&&flow.mag<2){
+    out.push({g:`The camera's own exposure control is inside the measurement`,
+      c:.55,
+      why:`The leading mode is non-oscillatory with a ${fmt(koop.modes[0].tau,2)} s memory while the scene is barely moving — a slow global relaxation of brightness, which is what auto-exposure and auto-white-balance do.`,
+      kill:`Kills it: lock exposure in the camera settings, or flash a light. A true scene process should not have the same time constant everywhere in the frame.`,
+      tags:["Koopman","flow"]});
+  }
+  if(ptol.score>0.5&&S.peaksTrusted&&S.phaseFit){
+    out.push({g:`A disturbance is travelling across the field, not sitting still`,
+      c:clamp(ptol.score,.2,.85),
+      why:`At ${fmt(S.peaks[0].f,2)} Hz the phases across the 48 regions fall on one phase ramp (coherence ${fmt(S.phaseFit.r2,2)})${S.phaseFit.aliased?", though the wavelength is near the region grid so the speed is unresolvable":` with an implied speed of ${fmt(S.phaseFit.speed,1)} cells/s`}.`,
+      kill:`Kills it: block half the frame. A real travelling front should be truncated; an artefact of shared lighting should not care.`,
+      tags:["chords","phase"]});
+  }
+  if(graph.smooth>0.72){
+    out.push({g:`The scene is organised broadly — its parts move together`,
+      c:clamp((graph.smooth-0.6)*2.2,.2,.8),
+      why:`${fmt(graph.smooth*100,0)}% of the current pattern's energy lies in the smooth modes of a connectivity graph that was built from the data itself, not assumed.`,
+      kill:`Kills it: introduce something that moves in only one corner. Energy should shift into rough graph modes within a second or two.`,
+      tags:["graph Fourier"]});
+  } else if(graph.smooth<0.4&&graph.score>0){
+    out.push({g:`The scene is organised locally — regions have gone their own way`,
+      c:clamp((0.5-graph.smooth)*2,.2,.75),
+      why:`Only ${fmt(graph.smooth*100,0)}% of energy is smooth across the learned connectivity; activity changes sharply from region to neighbouring region.`,
+      kill:`Kills it: dim the whole room. If the roughness was really independent sources, a global change should not reorganise it.`,
+      tags:["graph Fourier"]});
+  }
+  if(apollo.score>0.5){
+    out.push({g:apollo.near
+        ? `A light source is close by, roughly behind cell (${apollo.px}, ${apollo.py})`
+        : `The light is far away and comes from the ${apollo.az>-45&&apollo.az<45?"right":apollo.az>=45&&apollo.az<135?"top":apollo.az<=-45&&apollo.az>-135?"bottom":"left"}`,
+      c:clamp(apollo.score*.8,.15,.8),
+      why:apollo.near
+        ? `Brightness fits an inverse-square falloff around that cell (${fmt(apollo.r2r,2)}) better than a flat gradient (${fmt(apollo.r2p,2)}) — Apollonius' constant-ratio loci close into circles when the source is near.`
+        : `Brightness fits a plane (${fmt(apollo.r2p,2)}) better than any radial falloff — parallel rays, so the source is far compared with the scene.`,
+      kill:`Kills it: move the camera sideways by half a metre. A near source shifts its bright centre; a far one does not.`,
+      tags:["ratio loci"]});
+  }
+  if(S.peaksTrusted&&ratio.best&&ratio.best.e<0.05&&S.peaks.length>1){
+    out.push({g:`Two of the rhythms belong to one mechanism (${ratio.best.p}:${ratio.best.q})`,
+      c:clamp(1-ratio.best.e/0.05,.2,.8),
+      why:`${fmt(ratio.best.f2,2)} Hz and ${fmt(ratio.best.f1,2)} Hz sit at ${ratio.best.p}:${ratio.best.q} within ${fmt(ratio.best.e*100,1)}%. Independent processes have no reason to lock to small integers.`,
+      kill:`Kills it: change one of them alone (move only the thing producing the faster rhythm). If the ratio holds anyway, it was aliasing against the frame rate.`,
+      tags:["Pythagoras","Diophantus"]});
+  }
+  if(probe.score>0.25&&S.probe.on){
+    out.push({g:`This screen and this camera are in the same physical loop`,
+      c:clamp(Math.abs(S.probe.r),.2,.9),
+      why:`A known 127-step sequence sent through the panel comes back in the image at r=${fmt(S.probe.r,2)} with ${fmt(S.probe.delay*1000,0)} ms delay and gain ${fmt(S.probe.gain,3)}. That path — panel, air, whatever it lights, lens, sensor, exposure control — has just been measured, without knowing anything about it beforehand.`,
+      kill:`Kills it: turn the panel away from the scene. The correlation should collapse. If it survives, the coupling is electronic (shared clock), not optical.`,
+      tags:["known excitation"]});
+  }
+  if(resid.excess>1.9){
+    out.push({g:`Something at region (${resid.worst%GW}, ${(resid.worst/GW)|0}) is not explained by any story I have`,
+      c:clamp((resid.excess-1.5)/3,.2,.8),
+      why:`After subtracting the four leading modes, that region's leftovers are still autocorrelated at ${fmt(resid.excess,1)}× the field average. Large error is usually noise; error with timing is a missing cause.`,
+      kill:`Kills it: point the camera elsewhere. If the same grid cell stays hot regardless of scene, it is a sensor defect, not a thing in the world.`,
+      tags:["residual"]});
+  }
+  if(recur.excess>0.3&&(S.peaksTrusted||flow.mag>3)){
+    out.push({g:`The motion repeats — this is a cycle, not a one-off`,
+      c:clamp(recur.excess*1.6,.2,.85),
+      why:`${fmt(recur.det*100,0)}% of returns in the reconstructed state space are followed by matching continuations, against ${fmt(recur.null*100,0)}% for the same numbers shuffled. The gap is the structure.`,
+      kill:`Kills it: stop and start again unpredictably. The gap over the shuffled null should close.`,
+      tags:["recurrence"]});
+  }
+  if(micro.score>0&&S.microDwell/S.fps>1.5){
+    out.push({g:`The field spends its time in a few quasi-stable configurations`,
+      c:.45,
+      why:`Four spatial configurations were learned online with no labels; the current one has been held ${fmt(S.microDwell/S.fps,1)} s. If that holds, the spectrum you see above may be the shadow of these states rather than a set of oscillators.`,
+      kill:`Kills it: check whether the peak frequency changes with the state. If every state carries the same spectrum, the states are not generating it.`,
+      tags:["microstates"]});
+  }
+  if(heron.agree!==undefined&&Math.abs(heron.agree)>0.05&&heron.score>0){
+    out.push({g:heron.agree>0.5
+        ? `Whatever couples these regions travels through the picture`
+        : `Whatever couples these regions ignores the picture's geometry`,
+      c:clamp(Math.abs(heron.agree),.15,.75),
+      why:`Geometry reconstructed from propagation delays alone correlates r=${fmt(heron.agree,2)} with the actual grid layout. ${heron.agree>0.5?"Delay is distance here.":"Distant regions are as coupled as near ones — a common cause, not propagation."}`,
+      kill:`Kills it: occlude the middle of the frame. If it was really propagation, delays across the gap should grow.`,
+      tags:["triangulation"]});
+  }
+  if(rule3.r>0.6){
+    out.push({g:`The fluctuations are photon noise, not scene activity`,
+      c:clamp(rule3.r*.7,.2,.7),
+      why:`Region variance rises proportionally with region brightness (r=${fmt(rule3.r,2)}, k=${fmt(rule3.k,4)}) — the signature of counting statistics rather than anything happening in the room.`,
+      kill:`Kills it: turn on more light. Proportionality should hold while absolute noise falls; if the relation breaks, something in the scene was moving after all.`,
+      tags:["proportion"]});
+  }
+
+  out.sort((a,b)=>b.c-a.c);
+  const el=document.getElementById("guesses");
+  if(!out.length){ el.innerHTML='<div class="note">No guess clears its own evidence bar right now. That is a result, not a failure.</div>'; S.guesses=[]; return; }
+  S.guesses=out;
+  el.innerHTML=out.slice(0,6).map(o=>`
+    <div class="guess">
+      <div class="g">${o.g}</div>
+      <div class="conf"><i style="width:${Math.round(o.c*100)}%"></i></div>
+      <div class="why">${o.why}</div>
+      <div class="kill">${o.kill}</div>
+      <div class="tagrow">${o.tags.map(t=>`<span class="tag">${t}</span>`).join("")}</div>
+    </div>`).join("");
+}
+
+/* ================================================================
+   RENDER
+   ================================================================ */
+function renderLenses(){
+  const a=[],m=[];
+  L.forEach(l=>{
+    const h=`<div class="lens ${l.era==="mod"?"mod":""}${l.glint?" glint":""}">
+      <div><span class="nm">${l.name}</span><span class="who">${l.who}</span></div>
+      <div class="say">${l.say}</div></div>`;
+    (l.era==="anc"?a:m).push(h);
+  });
+  document.getElementById("lensAnc").innerHTML=a.join("");
+  document.getElementById("lensMod").innerHTML=m.join("");
+}
+
+function fastPanel(){
+  microStep();
+  drawStrip();
+  const mo=G("moment"), fl=G("flow"), inf=G("info");
+  document.getElementById("fpslab").textContent=`${fmt(S.fps,1)} fps · ${S.n}/${NBUF} frames buffered · ${NREG} regions`;
+  document.getElementById("raw").innerHTML=[
+    ["source",S.srcLabel||"—"],
+    ["frame size",vid.videoWidth?`${vid.videoWidth}×${vid.videoHeight}`:"—"],
+    ["frames seen",S.frames],
+    ["sample rate",fmt(S.fps,1)+" Hz"],
+    ["Nyquist",fmt(S.fps/2,1)+" Hz — nothing faster can be honestly claimed"],
+    ["mean luminance",fmt(getG(S.gHist,0),4)],
+    ["centre of mass",`${fmt(mo.cx,1)}, ${fmt(mo.cy,1)}`],
+    ["mass drift",fmt(mo.speed,2)+" cell/s"],
+    ["bulk flow",fmt(fl.mag,2)+" cell/s"],
+    ["spatial entropy",fmt(inf.H,2)+" bits"],
+    ["effective dimensions",G("pca").PR?fmt(G("pca").PR,1):"—"],
+    ["microstate",`${S.microIdx+1}/4 · ${fmt(S.microDwell/S.fps,1)} s`]
+  ].map(([k,v])=>`<div>${k}</div><div>${v}</div>`).join("");
+  document.getElementById("nyq").textContent=fmt(S.fps/2,1)+" Hz";
+}
+
+function plot(id,vals,color,logy){
+  const c=document.getElementById(id), w=c.clientWidth||300, h=c.clientHeight||64;
+  if(c.width!==w) c.width=w; if(c.height!==h) c.height=h;
+  const x=c.getContext("2d");
+  x.clearRect(0,0,w,h);
+  if(!vals||!vals.length) return;
+  let mx=0; for(const v of vals) mx=Math.max(mx,logy?Math.log(1+v*1000):v);
+  mx=mx||1;
+  x.strokeStyle="#1a242c"; x.beginPath();
+  for(let i=1;i<4;i++){ x.moveTo(0,h*i/4); x.lineTo(w,h*i/4); } x.stroke();
+  x.fillStyle=color;
+  const bw=w/vals.length;
+  for(let i=0;i<vals.length;i++){
+    const v=(logy?Math.log(1+vals[i]*1000):vals[i])/mx;
+    x.fillRect(i*bw,h-v*h,Math.max(1,bw-0.6),v*h);
+  }
+}
+function drawPlots(){
+  if(S.spec) plot("pSpec",Array.from(S.spec),"#5fd0d6",true);
+  if(S.peaks&&S.peaks.length) document.getElementById("specpk").textContent=`peak ${fmt(S.peaks[0].f,2)} Hz`;
+  if(S.gCoef) plot("pGraph",Array.from(S.gCoef).map(Math.abs),"#d9a441",false);
+  if(G("graph").smooth!==undefined) document.getElementById("graphsplit").textContent=`${fmt(G("graph").smooth*100,0)}% smooth`;
+  if(S.pcaVal) plot("pPCA",S.pcaVal.map(v=>Math.max(v,0)),"#8fbf6b",false);
+  if(G("pca").PR) document.getElementById("pcalab").textContent=`${fmt(G("pca").PR,1)} effective`;
+  if(S.microSeq.length){
+    const c=document.getElementById("pState"), w=c.clientWidth||300,h=44;
+    c.width=w;c.height=h; const x=c.getContext("2d");
+    const cols=["#d9a441","#5fd0d6","#8fbf6b","#e0715a"];
+    const seq=S.microSeq.slice(-240), bw=w/seq.length;
+    for(let i=0;i<seq.length;i++){ x.fillStyle=cols[seq[i]]; x.globalAlpha=.85; x.fillRect(i*bw,0,Math.max(1,bw),h); }
+    x.globalAlpha=1;
+    document.getElementById("statelab").textContent=`state ${S.microIdx+1}`;
+    document.getElementById("statedwell").textContent=`held ${fmt(S.microDwell/S.fps,1)} s`;
+  }
+}
+
+function drawOverlay(){
+  const w=ov.clientWidth||400, h=ov.clientHeight||300;
+  if(ov.width!==w){ov.width=w;ov.height=h;}
+  octx.clearRect(0,0,w,h);
+  const sx=w/FW, sy=h/FH, bx=w/GW, by=h/GH;
+  const m=S.overlay;
+  if(m==="moment"){
+    const mo=G("moment");
+    if(mo.cx===undefined) return;
+    octx.strokeStyle="#d9a441"; octx.lineWidth=1.5;
+    octx.save(); octx.translate(mo.cx*sx,mo.cy*sy); octx.rotate(mo.th);
+    octx.beginPath(); octx.ellipse(0,0,mo.l1*sx*2,mo.l2*sy*2,0,0,7); octx.stroke();
+    octx.beginPath(); octx.moveTo(-mo.l1*sx*2,0); octx.lineTo(mo.l1*sx*2,0); octx.stroke();
+    octx.restore();
+    octx.fillStyle="#d9a441"; octx.beginPath(); octx.arc(mo.cx*sx,mo.cy*sy,3,0,7); octx.fill();
+    octx.font="10px ui-monospace,monospace";
+    octx.fillText(`M₀ centre · ecc ${fmt(mo.ecc,2)}`,mo.cx*sx+7,mo.cy*sy-6);
+  } else if(m==="flow"){
+    octx.strokeStyle="#5fd0d6"; octx.lineWidth=1.2;
+    for(let gy=0;gy<GH;gy++)for(let gx=0;gx<GW;gx++){
+      const i=(gy*GW+gx)*2, dx=S.flow[i], dy=S.flow[i+1];
+      if(Math.hypot(dx,dy)<0.6) continue;
+      const cx=gx*bx+bx/2, cy=gy*by+by/2;
+      octx.beginPath(); octx.moveTo(cx,cy); octx.lineTo(cx+dx*7,cy+dy*7); octx.stroke();
+      octx.fillStyle="#5fd0d6"; octx.beginPath(); octx.arc(cx+dx*7,cy+dy*7,1.8,0,7); octx.fill();
+    }
+  } else if(m==="resid"&&S.resid){
+    let mx=0; for(const v of S.resid) mx=Math.max(mx,v); mx=mx||1;
+    for(let r=0;r<NREG;r++){
+      const a=S.resid[r]/mx;
+      if(a<0.25) continue;
+      octx.fillStyle=`rgba(224,113,90,${(a-0.25)*0.75})`;
+      octx.fillRect((r%GW)*bx,((r/GW)|0)*by,bx,by);
+    }
+    const wr=G("resid").worst;
+    if(wr!==undefined){
+      octx.strokeStyle="#e0715a"; octx.lineWidth=2;
+      octx.strokeRect((wr%GW)*bx,((wr/GW)|0)*by,bx,by);
+      octx.fillStyle="#e0715a"; octx.font="10px ui-monospace,monospace";
+      octx.fillText("unexplained",(wr%GW)*bx+3,((wr/GW)|0)*by+12);
+    }
+  } else if(m==="graph"&&S.corr){
+    const pairs=[];
+    for(let i=0;i<NREG;i++)for(let j=i+1;j<NREG;j++) pairs.push([S.corr[i*NREG+j],i,j]);
+    pairs.sort((a,b)=>Math.abs(b[0])-Math.abs(a[0]));
+    for(const [c,i,j] of pairs.slice(0,60)){
+      octx.strokeStyle=c>0?`rgba(217,164,65,${Math.min(1,Math.abs(c))*0.55})`:`rgba(95,208,214,${Math.min(1,Math.abs(c))*0.55})`;
+      octx.lineWidth=Math.abs(c)*2.2;
+      octx.beginPath();
+      octx.moveTo((i%GW)*bx+bx/2,((i/GW)|0)*by+by/2);
+      octx.lineTo((j%GW)*bx+bx/2,((j/GW)|0)*by+by/2);
+      octx.stroke();
+    }
+  } else if(m==="phase"&&S.phase){
+    for(let r=0;r<NREG;r++){
+      const p=(S.phase[r]+Math.PI)/(2*Math.PI);
+      octx.fillStyle=`hsla(${p*360},60%,55%,0.45)`;
+      octx.fillRect((r%GW)*bx,((r/GW)|0)*by,bx,by);
+    }
+    if(S.phaseFit&&S.phaseFit.r2>0.45){
+      octx.strokeStyle="#fff"; octx.lineWidth=2;
+      const cx=w/2, cy=h/2, k=Math.hypot(S.phaseFit.kx,S.phaseFit.ky)||1;
+      octx.beginPath(); octx.moveTo(cx,cy);
+      octx.lineTo(cx+S.phaseFit.kx/k*60,cy+S.phaseFit.ky/k*60); octx.stroke();
+    }
+  }
+}
+
+/* ---------------- log + ledger ---------------- */
+function logit(msg,cls){
+  const t=((performance.now()-S.t0)/1000);
+  S.log.push({t,msg});
+  const el=document.getElementById("log");
+  const d=document.createElement("div");
+  d.innerHTML=`<span class="t">${fmt(t,1)}s</span> <span class="${cls||""}">${msg}</span>`;
+  el.appendChild(d); el.scrollTop=el.scrollHeight;
+  while(el.children.length>200) el.removeChild(el.firstChild);
+}
+function ledger(){
+  const lines=[];
+  lines.push("LAW EXTRACTOR — LEDGER");
+  lines.push(new Date().toISOString());
+  lines.push(`sample rate ${fmt(S.fps,2)} Hz · Nyquist ${fmt(S.fps/2,2)} Hz · ${S.frames} frames · ${NREG} regions · window ${WIN}`);
+  lines.push("");
+  lines.push("MEASURED (numbers this instrument actually produced)");
+  L.forEach(l=>lines.push(`  [${l.era==="anc"?"ancient":"modern"}] ${l.name} (${l.who}) — score ${fmt(l.score,3)}${l.glint?"  <<< GLINT":""}\n      ${l.say}`));
+  lines.push("");
+  lines.push("GUESSED (inference, each with the experiment that would kill it)");
+  (S.guesses||[]).forEach(g=>{
+    lines.push(`  * ${g.g}   [confidence ${fmt(g.c,2)}]`);
+    lines.push(`      because: ${g.why}`);
+    lines.push(`      ${g.kill}`);
+  });
+  lines.push("");
+  lines.push("NOT ESTABLISHED");
+  lines.push("  - Every 'lens' is a proposed way of looking, not a claim about what is there.");
+  lines.push("  - Nothing above f_Nyquist was measured; apparent fast rhythms may be aliases.");
+  lines.push("  - Correlation-built graphs are not anatomy; the graph is a description of covariation.");
+  lines.push("  - The camera's exposure/white-balance control is inside every measurement unless locked.");
+  lines.push("  - No guess here has survived its own falsifier until you have run it.");
+  lines.push("");
+  lines.push("EVENTS");
+  S.log.forEach(e=>lines.push(`  ${fmt(e.t,1)}s  ${e.msg}`));
+  const blob=new Blob([lines.join("\n")],{type:"text/plain"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="law_extractor_ledger_"+Date.now()+".txt";
+  a.click();
+}
+
+/* ---------------- wiring ---------------- */
+document.getElementById("start").onclick=()=>start(document.getElementById("camsel").value||null);
+document.getElementById("camsel").onchange=e=>{ if(e.target.value) start(e.target.value); };
+document.getElementById("testBtn").onclick=probeCameras;
+document.getElementById("screenBtn").onclick=startScreen;
+document.getElementById("fileBtn").onclick=()=>document.getElementById("fileInp").click();
+document.getElementById("fileInp").onchange=e=>{
+  const f=e.target.files[0]; if(!f) return;
+  attach(URL.createObjectURL(f),"file — "+f.name,true);
+};
+if(navigator.mediaDevices&&navigator.mediaDevices.addEventListener)
+  navigator.mediaDevices.addEventListener("devicechange",listCams);
+listCams();
+document.getElementById("pause").onclick=e=>{
+  S.paused=!S.paused; e.target.textContent=S.paused?"Resume":"Pause"; e.target.classList.toggle("on",S.paused);
+};
+document.getElementById("dump").onclick=ledger;
+document.getElementById("probeBtn").onclick=e=>{
+  S.probe.on=!S.probe.on;
+  e.target.textContent=S.probe.on?"Stop probe":"Start probe";
+  e.target.classList.toggle("on",S.probe.on);
+  if(!S.probe.on){
+    probePanel.style.background="#2a2a2a"; probePanel.style.color="#000";
+    probePanel.textContent="PROBE PANEL — idle";
+    document.getElementById("probeStat").textContent="off";
+    logit("probe stopped","m");
+  } else logit("probe driving a 127-step sequence at 4 Hz — measuring what comes back","m");
+};
+document.querySelectorAll("[data-ov]").forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll("[data-ov]").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on"); S.overlay=b.dataset.ov;
+  };
+});
+
+buildStrip(); renderLenses();
+setInterval(()=>{ if(S.probe.on) probeStep(); },250);
+setInterval(heavy,1000);
+logit("instrument ready — 27 rulers loaded, none of them told what they are looking at","a");
+</script>
+</body>
+</html>
